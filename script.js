@@ -240,10 +240,24 @@ const QUICK_ADD_TEMPLATES = {
 };
 
 /**
- * SkillPath Database Layer (Local Cache + Supabase Cloud Sync)
+ * UUID v4 Generator for Database Entities
+ */
+function generateUUID() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+/**
+ * SkillPath Database Layer (Supabase Cloud Storage + Local Fast Cache)
  */
 const SkillPathDB = {
-  // Retrieve storage from localStorage
+  // Retrieve storage from cache
   getData() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -257,7 +271,7 @@ const SkillPathDB = {
     }
   },
 
-  // Save to localStorage
+  // Save to cache
   saveData(data) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -279,84 +293,299 @@ const SkillPathDB = {
     };
   },
 
-  // Background Cloud Sync Trigger
-  triggerCloudSyncDomain(domain) {
-    if (typeof SkillPathAuth !== 'undefined' && typeof SkillPathCloud !== 'undefined') {
-      SkillPathAuth.getUser().then(user => {
-        if (user) {
-          SkillPathCloud.saveRoadmap(domain);
-        }
-      }).catch(() => {});
-    }
-  },
-
-  triggerCloudDeleteDomain(domainId) {
-    if (typeof SkillPathAuth !== 'undefined' && typeof SkillPathCloud !== 'undefined') {
-      SkillPathAuth.getUser().then(user => {
-        if (user) {
-          SkillPathCloud.deleteRoadmap(domainId);
-        }
-      }).catch(() => {});
-    }
-  },
-
   /**
-   * Sync with Supabase Cloud:
-   * Pulls user's cloud roadmaps, tasks, and resources.
-   * If user has local items and cloud is empty, migrates local items to cloud.
+   * Load all user data from Supabase PostgreSQL tables
    */
-  async syncWithCloud() {
-    if (typeof SkillPathAuth === 'undefined' || typeof SkillPathCloud === 'undefined') return false;
+  async loadFromSupabase() {
+    const client = window.supabaseClient;
+    if (!client || typeof SkillPathAuth === 'undefined') return false;
 
     try {
       const user = await SkillPathAuth.getUser();
       if (!user) return false;
 
-      const isReady = await SkillPathCloud.isCloudAvailable();
-      if (!isReady) {
-        console.info('Supabase database tables are not ready or RLS is configured.');
-        return false;
-      }
+      // 1. Fetch domains
+      const { data: domainsData, error: domErr } = await client
+        .from('domains')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
 
-      const cloudRoadmaps = await SkillPathCloud.fetchRoadmaps();
-      const localData = this.getData();
-      let hasChanges = false;
+      if (domErr) throw domErr;
 
-      // Safe migration for initial cloud login
-      if (localData.domains && localData.domains.length > 0 && (!cloudRoadmaps || cloudRoadmaps.length === 0)) {
-        await SkillPathMigrate.migrateLocalDataToCloud();
-        const migrated = await SkillPathCloud.fetchRoadmaps();
-        if (migrated && migrated.length > 0) {
-          localData.domains = migrated;
-          hasChanges = true;
+      // 2. Fetch stages
+      const { data: stagesData, error: stgErr } = await client
+        .from('stages')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('position', { ascending: true });
+
+      if (stgErr) throw stgErr;
+
+      // 3. Fetch topics
+      const { data: topicsData, error: topErr } = await client
+        .from('topics')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('position', { ascending: true });
+
+      if (topErr) throw topErr;
+
+      // 4. Fetch projects
+      const { data: projectsData, error: prjErr } = await client
+        .from('projects')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('position', { ascending: true });
+
+      if (prjErr) throw prjErr;
+
+      // 5. Fetch planner_tasks
+      const { data: plannerData, error: plnErr } = await client
+        .from('planner_tasks')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+
+      if (plnErr) throw plnErr;
+
+      // 6. Fetch resources
+      const { data: resourcesData, error: resErr } = await client
+        .from('resources')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+
+      if (resErr) throw resErr;
+
+      // Assemble stages hierarchy with topics & projects
+      const stagesByDomain = {};
+      (stagesData || []).forEach(stage => {
+        const stageTopics = (topicsData || [])
+          .filter(t => t.stage_id === stage.id)
+          .map(t => ({
+            id: t.id,
+            title: t.title,
+            link: t.link || '',
+            completed: !!t.completed
+          }));
+
+        const stageProjects = (projectsData || [])
+          .filter(p => p.stage_id === stage.id)
+          .map(p => ({
+            id: p.id,
+            title: p.title,
+            link: p.link || '',
+            completed: !!p.completed
+          }));
+
+        const formattedStage = {
+          id: stage.id,
+          title: stage.title,
+          weeks: stage.weeks || 1,
+          topics: stageTopics,
+          projects: stageProjects
+        };
+
+        if (!stagesByDomain[stage.domain_id]) {
+          stagesByDomain[stage.domain_id] = [];
         }
-      } else if (cloudRoadmaps && cloudRoadmaps.length > 0) {
-        localData.domains = cloudRoadmaps;
-        hasChanges = true;
-      }
+        stagesByDomain[stage.domain_id].push(formattedStage);
+      });
 
-      // Sync Planner Tasks
-      const cloudPlanner = await SkillPathCloud.fetchPlannerTasks();
-      if (cloudPlanner) {
-        localData.planner = cloudPlanner;
-        hasChanges = true;
-      }
+      // Assemble domains
+      const formattedDomains = (domainsData || []).map(dom => ({
+        id: dom.id,
+        name: dom.name,
+        description: dom.description || '',
+        icon: dom.icon || '🎯',
+        color: dom.color || '#6366f1',
+        stages: stagesByDomain[dom.id] || []
+      }));
 
-      // Sync Resources
-      const cloudRes = await SkillPathCloud.fetchResources();
-      if (cloudRes && cloudRes.length > 0) {
-        localData.resources = cloudRes;
-        hasChanges = true;
-      }
+      // Assemble planner
+      const formattedPlanner = {
+        Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: []
+      };
+      (plannerData || []).forEach(task => {
+        if (formattedPlanner[task.day]) {
+          formattedPlanner[task.day].push({
+            id: task.id,
+            text: task.task_text,
+            completed: !!task.completed,
+            priority: task.priority || 'normal'
+          });
+        }
+      });
 
-      if (hasChanges) {
-        this.saveData(localData);
-      }
+      // Assemble resources
+      const formattedResources = (resourcesData || []).map(r => ({
+        id: r.id,
+        title: r.title,
+        url: r.url,
+        domain: r.domain || 'General',
+        notes: r.notes || ''
+      }));
 
-      return hasChanges;
+      const currentData = this.getData();
+      currentData.domains = formattedDomains;
+      currentData.planner = formattedPlanner;
+      currentData.resources = formattedResources;
+      this.saveData(currentData);
+
+      return true;
     } catch (e) {
-      console.warn('Sync with cloud error:', e);
+      console.warn('Could not load data from Supabase:', e);
       return false;
+    }
+  },
+
+  // Alias for backward compatibility
+  async syncWithCloud() {
+    return await this.loadFromSupabase();
+  },
+
+  /**
+   * One-time import of legacy localStorage data into user's Supabase account
+   */
+  async importLocalDataToAccount() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { success: false, error: 'No local data found.' };
+
+    let localData;
+    try {
+      localData = JSON.parse(raw);
+    } catch (e) {
+      return { success: false, error: 'Corrupt local data format.' };
+    }
+
+    const client = window.supabaseClient;
+    if (!client || typeof SkillPathAuth === 'undefined') {
+      return { success: false, error: 'Supabase client not connected.' };
+    }
+
+    const user = await SkillPathAuth.getUser();
+    if (!user) {
+      return { success: false, error: 'Please log in to import your data.' };
+    }
+
+    let count = 0;
+    try {
+      if (Array.isArray(localData.domains)) {
+        for (const dom of localData.domains) {
+          const domainId = generateUUID();
+          const { error: domErr } = await client.from('domains').insert({
+            id: domainId,
+            user_id: user.id,
+            name: dom.name,
+            description: dom.description || '',
+            icon: dom.icon || '🎯',
+            color: dom.color || '#6366f1',
+            local_id: dom.id
+          });
+
+          if (domErr) {
+            console.warn('Import domain skip/error:', domErr);
+            continue;
+          }
+          count++;
+
+          if (Array.isArray(dom.stages)) {
+            for (let sIdx = 0; sIdx < dom.stages.length; sIdx++) {
+              const stg = dom.stages[sIdx];
+              const stageId = generateUUID();
+
+              const { error: stgErr } = await client.from('stages').insert({
+                id: stageId,
+                user_id: user.id,
+                domain_id: domainId,
+                title: stg.title,
+                weeks: parseInt(stg.weeks, 10) || 1,
+                position: sIdx,
+                local_id: stg.id
+              });
+
+              if (stgErr) continue;
+
+              if (Array.isArray(stg.topics)) {
+                for (let tIdx = 0; tIdx < stg.topics.length; tIdx++) {
+                  const top = stg.topics[tIdx];
+                  await client.from('topics').insert({
+                    id: generateUUID(),
+                    user_id: user.id,
+                    stage_id: stageId,
+                    title: top.title,
+                    link: top.link || '',
+                    completed: !!top.completed,
+                    position: tIdx,
+                    local_id: top.id
+                  });
+                }
+              }
+
+              if (Array.isArray(stg.projects)) {
+                for (let pIdx = 0; pIdx < stg.projects.length; pIdx++) {
+                  const prj = stg.projects[pIdx];
+                  await client.from('projects').insert({
+                    id: generateUUID(),
+                    user_id: user.id,
+                    stage_id: stageId,
+                    title: prj.title,
+                    link: prj.link || '',
+                    completed: !!prj.completed,
+                    position: pIdx,
+                    local_id: prj.id
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (localData.planner && typeof localData.planner === 'object') {
+        for (const [day, tasks] of Object.entries(localData.planner)) {
+          if (Array.isArray(tasks)) {
+            for (const task of tasks) {
+              await client.from('planner_tasks').insert({
+                id: generateUUID(),
+                user_id: user.id,
+                day,
+                task_text: task.text,
+                completed: !!task.completed,
+                priority: task.priority || 'normal',
+                local_id: task.id
+              });
+            }
+          }
+        }
+      }
+
+      if (Array.isArray(localData.resources)) {
+        for (const res of localData.resources) {
+          await client.from('resources').insert({
+            id: generateUUID(),
+            user_id: user.id,
+            title: res.title,
+            url: res.url,
+            domain: res.domain || 'General',
+            notes: res.notes || '',
+            local_id: res.id
+          });
+        }
+      }
+
+      // Mark legacy local storage as migrated so import button hides
+      localStorage.setItem('skillpath_legacy_imported', 'true');
+      localStorage.removeItem(STORAGE_KEY);
+
+      // Reload fresh data from Supabase
+      await this.loadFromSupabase();
+
+      return { success: true, count };
+    } catch (e) {
+      console.error('Migration failed:', e);
+      return { success: false, error: e.message || 'Import failed.' };
     }
   },
 
@@ -367,7 +596,7 @@ const SkillPathDB = {
 
   getDomain(id) {
     const domains = this.getDomains();
-    return domains.find(d => d.id === id || d.cloudId === id) || null;
+    return domains.find(d => d.id === id) || null;
   },
 
   addDomain({ name, description, icon, color }) {
@@ -377,8 +606,9 @@ const SkillPathDB = {
       return { success: false, error: 'A domain with this name already exists.' };
     }
 
+    const domainId = generateUUID();
     const newDomain = {
-      id: 'dom_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      id: domainId,
       name: name.trim(),
       description: description ? description.trim() : 'Personal learning roadmap.',
       icon: icon || '🎯',
@@ -388,7 +618,26 @@ const SkillPathDB = {
 
     data.domains.push(newDomain);
     this.saveData(data);
-    this.triggerCloudSyncDomain(newDomain);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client && typeof SkillPathAuth !== 'undefined') {
+      SkillPathAuth.getUser().then(user => {
+        if (user) {
+          client.from('domains').insert({
+            id: domainId,
+            user_id: user.id,
+            name: newDomain.name,
+            description: newDomain.description,
+            icon: newDomain.icon,
+            color: newDomain.color
+          }).then(({ error }) => {
+            if (error) console.error('Supabase domain insert error:', error);
+          });
+        }
+      });
+    }
+
     return { success: true, domain: newDomain };
   },
 
@@ -402,18 +651,106 @@ const SkillPathDB = {
       return { success: false, error: `Domain "${template.name}" already exists in your roadmaps.` };
     }
 
-    const newDomain = JSON.parse(JSON.stringify(template));
-    newDomain.id = 'dom_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const domainId = generateUUID();
+    const newStages = (template.stages || []).map((stg, sIdx) => {
+      const stageId = generateUUID();
+      const topics = (stg.topics || []).map((t, tIdx) => ({
+        id: generateUUID(),
+        title: t.title,
+        link: t.link || '',
+        completed: false
+      }));
+      const projects = (stg.projects || []).map((p, pIdx) => ({
+        id: generateUUID(),
+        title: p.title,
+        link: p.link || '',
+        completed: false
+      }));
+      return {
+        id: stageId,
+        title: stg.title,
+        weeks: stg.weeks || 1,
+        topics,
+        projects
+      };
+    });
+
+    const newDomain = {
+      id: domainId,
+      name: template.name,
+      description: template.description,
+      icon: template.icon,
+      color: template.color,
+      stages: newStages
+    };
 
     data.domains.push(newDomain);
     this.saveData(data);
-    this.triggerCloudSyncDomain(newDomain);
+
+    // Persist domain, stages, topics, and projects into Supabase
+    const client = window.supabaseClient;
+    if (client && typeof SkillPathAuth !== 'undefined') {
+      SkillPathAuth.getUser().then(async user => {
+        if (!user) return;
+        try {
+          await client.from('domains').insert({
+            id: domainId,
+            user_id: user.id,
+            name: newDomain.name,
+            description: newDomain.description,
+            icon: newDomain.icon,
+            color: newDomain.color
+          });
+
+          for (let sIdx = 0; sIdx < newStages.length; sIdx++) {
+            const stg = newStages[sIdx];
+            await client.from('stages').insert({
+              id: stg.id,
+              user_id: user.id,
+              domain_id: domainId,
+              title: stg.title,
+              weeks: stg.weeks,
+              position: sIdx
+            });
+
+            for (let tIdx = 0; tIdx < stg.topics.length; tIdx++) {
+              const top = stg.topics[tIdx];
+              await client.from('topics').insert({
+                id: top.id,
+                user_id: user.id,
+                stage_id: stg.id,
+                title: top.title,
+                link: top.link || '',
+                completed: false,
+                position: tIdx
+              });
+            }
+
+            for (let pIdx = 0; pIdx < stg.projects.length; pIdx++) {
+              const prj = stg.projects[pIdx];
+              await client.from('projects').insert({
+                id: prj.id,
+                user_id: user.id,
+                stage_id: stg.id,
+                title: prj.title,
+                link: prj.link || '',
+                completed: false,
+                position: pIdx
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Error saving preset to Supabase:', err);
+        }
+      });
+    }
+
     return { success: true, domain: newDomain };
   },
 
   updateDomain(id, { name, description, icon, color }) {
     const data = this.getData();
-    const index = data.domains.findIndex(d => d.id === id || d.cloudId === id);
+    const index = data.domains.findIndex(d => d.id === id);
     if (index === -1) return { success: false, error: 'Domain not found.' };
 
     const duplicate = data.domains.some((d, idx) => idx !== index && d.name.trim().toLowerCase() === name.trim().toLowerCase());
@@ -427,30 +764,52 @@ const SkillPathDB = {
     data.domains[index].color = color || data.domains[index].color || '#6366f1';
 
     this.saveData(data);
-    this.triggerCloudSyncDomain(data.domains[index]);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client) {
+      client.from('domains').update({
+        name: data.domains[index].name,
+        description: data.domains[index].description,
+        icon: data.domains[index].icon,
+        color: data.domains[index].color,
+        updated_at: new Date().toISOString()
+      }).eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase domain update error:', error);
+      });
+    }
+
     return { success: true, domain: data.domains[index] };
   },
 
   deleteDomain(id) {
     const data = this.getData();
     const initialLength = data.domains.length;
-    data.domains = data.domains.filter(d => d.id !== id && d.cloudId !== id);
+    data.domains = data.domains.filter(d => d.id !== id);
     if (data.domains.length === initialLength) {
       return { success: false, error: 'Domain not found.' };
     }
     this.saveData(data);
-    this.triggerCloudDeleteDomain(id);
+
+    // Persist to Supabase (cascade deletes stages, topics, projects)
+    const client = window.supabaseClient;
+    if (client) {
+      client.from('domains').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase domain delete error:', error);
+      });
+    }
+
     return { success: true };
   },
 
   // Roadmap Stages Management
   addStage(domainId, { title, weeks }) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
+    const domain = data.domains.find(d => d.id === domainId);
     if (!domain) return { success: false, error: 'Domain not found.' };
 
     const newStage = {
-      id: 'stg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      id: generateUUID(),
       title: title.trim(),
       weeks: parseInt(weeks, 10) || 1,
       topics: [],
@@ -460,42 +819,80 @@ const SkillPathDB = {
     if (!domain.stages) domain.stages = [];
     domain.stages.push(newStage);
     this.saveData(data);
-    this.triggerCloudSyncDomain(domain);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client && typeof SkillPathAuth !== 'undefined') {
+      SkillPathAuth.getUser().then(user => {
+        if (user) {
+          client.from('stages').insert({
+            id: newStage.id,
+            user_id: user.id,
+            domain_id: domainId,
+            title: newStage.title,
+            weeks: newStage.weeks,
+            position: domain.stages.length - 1
+          }).then(({ error }) => {
+            if (error) console.error('Supabase stage insert error:', error);
+          });
+        }
+      });
+    }
+
     return { success: true, stage: newStage };
   },
 
   updateStage(domainId, stageId, { title, weeks }) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
+    const domain = data.domains.find(d => d.id === domainId);
     if (!domain) return { success: false, error: 'Domain not found.' };
 
-    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
+    const stage = domain.stages.find(s => s.id === stageId);
     if (!stage) return { success: false, error: 'Stage not found.' };
 
     stage.title = title.trim();
     stage.weeks = parseInt(weeks, 10) || 1;
     this.saveData(data);
-    this.triggerCloudSyncDomain(domain);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client) {
+      client.from('stages').update({
+        title: stage.title,
+        weeks: stage.weeks
+      }).eq('id', stageId).then(({ error }) => {
+        if (error) console.error('Supabase stage update error:', error);
+      });
+    }
+
     return { success: true, stage };
   },
 
   deleteStage(domainId, stageId) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
+    const domain = data.domains.find(d => d.id === domainId);
     if (!domain) return { success: false, error: 'Domain not found.' };
 
-    domain.stages = domain.stages.filter(s => s.id !== stageId && s.cloudId !== stageId);
+    domain.stages = domain.stages.filter(s => s.id !== stageId);
     this.saveData(data);
-    this.triggerCloudSyncDomain(domain);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client) {
+      client.from('stages').delete().eq('id', stageId).then(({ error }) => {
+        if (error) console.error('Supabase stage delete error:', error);
+      });
+    }
+
     return { success: true };
   },
 
   moveStage(domainId, stageId, direction) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
+    const domain = data.domains.find(d => d.id === domainId);
     if (!domain || !domain.stages) return false;
 
-    const idx = domain.stages.findIndex(s => s.id === stageId || s.cloudId === stageId);
+    const idx = domain.stages.findIndex(s => s.id === stageId);
     if (idx === -1) return false;
 
     if (direction === 'up' && idx > 0) {
@@ -503,30 +900,39 @@ const SkillPathDB = {
       domain.stages[idx] = domain.stages[idx - 1];
       domain.stages[idx - 1] = temp;
       this.saveData(data);
-      this.triggerCloudSyncDomain(domain);
+      this.updateStagePositions(domain);
       return true;
     } else if (direction === 'down' && idx < domain.stages.length - 1) {
       const temp = domain.stages[idx];
       domain.stages[idx] = domain.stages[idx + 1];
       domain.stages[idx + 1] = temp;
       this.saveData(data);
-      this.triggerCloudSyncDomain(domain);
+      this.updateStagePositions(domain);
       return true;
     }
     return false;
   },
 
+  updateStagePositions(domain) {
+    const client = window.supabaseClient;
+    if (client && domain.stages) {
+      domain.stages.forEach((stg, i) => {
+        client.from('stages').update({ position: i }).eq('id', stg.id).then(() => {});
+      });
+    }
+  },
+
   // Topics Management
   addTopic(domainId, stageId, { title, link }) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
+    const domain = data.domains.find(d => d.id === domainId);
     if (!domain) return { success: false, error: 'Domain not found.' };
 
-    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
+    const stage = domain.stages.find(s => s.id === stageId);
     if (!stage) return { success: false, error: 'Stage not found.' };
 
     const newTopic = {
-      id: 'top_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      id: generateUUID(),
       title: title.trim(),
       link: link ? link.trim() : '',
       completed: false
@@ -535,65 +941,112 @@ const SkillPathDB = {
     if (!stage.topics) stage.topics = [];
     stage.topics.push(newTopic);
     this.saveData(data);
-    this.triggerCloudSyncDomain(domain);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client && typeof SkillPathAuth !== 'undefined') {
+      SkillPathAuth.getUser().then(user => {
+        if (user) {
+          client.from('topics').insert({
+            id: newTopic.id,
+            user_id: user.id,
+            stage_id: stageId,
+            title: newTopic.title,
+            link: newTopic.link,
+            completed: false,
+            position: stage.topics.length - 1
+          }).then(({ error }) => {
+            if (error) console.error('Supabase topic insert error:', error);
+          });
+        }
+      });
+    }
+
     return { success: true, topic: newTopic };
   },
 
   updateTopic(domainId, stageId, topicId, { title, link }) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
+    const domain = data.domains.find(d => d.id === domainId);
     if (!domain) return { success: false };
-    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
+    const stage = domain.stages.find(s => s.id === stageId);
     if (!stage) return { success: false };
-    const topic = stage.topics.find(t => t.id === topicId || t.cloudId === topicId);
+    const topic = stage.topics.find(t => t.id === topicId);
     if (!topic) return { success: false };
 
     topic.title = title.trim();
     topic.link = link ? link.trim() : '';
     this.saveData(data);
-    this.triggerCloudSyncDomain(domain);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client) {
+      client.from('topics').update({
+        title: topic.title,
+        link: topic.link
+      }).eq('id', topicId).then(({ error }) => {
+        if (error) console.error('Supabase topic update error:', error);
+      });
+    }
+
     return { success: true, topic };
   },
 
   toggleTopic(domainId, stageId, topicId) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
+    const domain = data.domains.find(d => d.id === domainId);
     if (!domain) return false;
-    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
+    const stage = domain.stages.find(s => s.id === stageId);
     if (!stage) return false;
-    const topic = stage.topics.find(t => t.id === topicId || t.cloudId === topicId);
+    const topic = stage.topics.find(t => t.id === topicId);
     if (!topic) return false;
 
     topic.completed = !topic.completed;
     this.saveData(data);
-    this.triggerCloudSyncDomain(domain);
-    if (typeof SkillPathCloud !== 'undefined') {
-      SkillPathCloud.updateProgressCompletion(topicId, topic.completed);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client) {
+      client.from('topics').update({
+        completed: topic.completed,
+        completed_at: topic.completed ? new Date().toISOString() : null
+      }).eq('id', topicId).then(({ error }) => {
+        if (error) console.error('Supabase topic toggle error:', error);
+      });
     }
+
     return topic.completed;
   },
 
   deleteTopic(domainId, stageId, topicId) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
+    const domain = data.domains.find(d => d.id === domainId);
     if (!domain) return false;
-    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
+    const stage = domain.stages.find(s => s.id === stageId);
     if (!stage) return false;
 
-    stage.topics = stage.topics.filter(t => t.id !== topicId && t.cloudId !== topicId);
+    stage.topics = stage.topics.filter(t => t.id !== topicId);
     this.saveData(data);
-    this.triggerCloudSyncDomain(domain);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client) {
+      client.from('topics').delete().eq('id', topicId).then(({ error }) => {
+        if (error) console.error('Supabase topic delete error:', error);
+      });
+    }
+
     return true;
   },
 
   moveTopic(domainId, stageId, topicId, direction) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
+    const domain = data.domains.find(d => d.id === domainId);
     if (!domain) return false;
-    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
+    const stage = domain.stages.find(s => s.id === stageId);
     if (!stage || !stage.topics) return false;
 
-    const idx = stage.topics.findIndex(t => t.id === topicId || t.cloudId === topicId);
+    const idx = stage.topics.findIndex(t => t.id === topicId);
     if (idx === -1) return false;
 
     if (direction === 'up' && idx > 0) {
@@ -601,14 +1054,12 @@ const SkillPathDB = {
       stage.topics[idx] = stage.topics[idx - 1];
       stage.topics[idx - 1] = temp;
       this.saveData(data);
-      this.triggerCloudSyncDomain(domain);
       return true;
     } else if (direction === 'down' && idx < stage.topics.length - 1) {
       const temp = stage.topics[idx];
       stage.topics[idx] = stage.topics[idx + 1];
       stage.topics[idx + 1] = temp;
       this.saveData(data);
-      this.triggerCloudSyncDomain(domain);
       return true;
     }
     return false;
@@ -617,14 +1068,14 @@ const SkillPathDB = {
   // Projects Management
   addProject(domainId, stageId, { title, link }) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
+    const domain = data.domains.find(d => d.id === domainId);
     if (!domain) return { success: false, error: 'Domain not found.' };
 
-    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
+    const stage = domain.stages.find(s => s.id === stageId);
     if (!stage) return { success: false, error: 'Stage not found.' };
 
     const newProject = {
-      id: 'prj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      id: generateUUID(),
       title: title.trim(),
       link: link ? link.trim() : '',
       completed: false
@@ -633,38 +1084,74 @@ const SkillPathDB = {
     if (!stage.projects) stage.projects = [];
     stage.projects.push(newProject);
     this.saveData(data);
-    this.triggerCloudSyncDomain(domain);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client && typeof SkillPathAuth !== 'undefined') {
+      SkillPathAuth.getUser().then(user => {
+        if (user) {
+          client.from('projects').insert({
+            id: newProject.id,
+            user_id: user.id,
+            stage_id: stageId,
+            title: newProject.title,
+            link: newProject.link,
+            completed: false,
+            position: stage.projects.length - 1
+          }).then(({ error }) => {
+            if (error) console.error('Supabase project insert error:', error);
+          });
+        }
+      });
+    }
+
     return { success: true, project: newProject };
   },
 
   toggleProject(domainId, stageId, projectId) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
+    const domain = data.domains.find(d => d.id === domainId);
     if (!domain) return false;
-    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
+    const stage = domain.stages.find(s => s.id === stageId);
     if (!stage) return false;
-    const project = stage.projects.find(p => p.id === projectId || p.cloudId === projectId);
+    const project = stage.projects.find(p => p.id === projectId);
     if (!project) return false;
 
     project.completed = !project.completed;
     this.saveData(data);
-    this.triggerCloudSyncDomain(domain);
-    if (typeof SkillPathCloud !== 'undefined') {
-      SkillPathCloud.updateProgressCompletion(projectId, project.completed);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client) {
+      client.from('projects').update({
+        completed: project.completed,
+        completed_at: project.completed ? new Date().toISOString() : null
+      }).eq('id', projectId).then(({ error }) => {
+        if (error) console.error('Supabase project toggle error:', error);
+      });
     }
+
     return project.completed;
   },
 
   deleteProject(domainId, stageId, projectId) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
+    const domain = data.domains.find(d => d.id === domainId);
     if (!domain) return false;
-    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
+    const stage = domain.stages.find(s => s.id === stageId);
     if (!stage) return false;
 
-    stage.projects = stage.projects.filter(p => p.id !== projectId && p.cloudId !== projectId);
+    stage.projects = stage.projects.filter(p => p.id !== projectId);
     this.saveData(data);
-    this.triggerCloudSyncDomain(domain);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client) {
+      client.from('projects').delete().eq('id', projectId).then(({ error }) => {
+        if (error) console.error('Supabase project delete error:', error);
+      });
+    }
+
     return true;
   },
 
@@ -743,8 +1230,9 @@ const SkillPathDB = {
     if (!data.planner) data.planner = {};
     if (!data.planner[day]) data.planner[day] = [];
 
+    const taskId = generateUUID();
     const newTask = {
-      id: 'pt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      id: taskId,
       text: text.trim(),
       completed: false,
       priority
@@ -752,34 +1240,65 @@ const SkillPathDB = {
 
     data.planner[day].push(newTask);
     this.saveData(data);
-    if (typeof SkillPathCloud !== 'undefined') {
-      SkillPathCloud.savePlannerTask(day, newTask);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client && typeof SkillPathAuth !== 'undefined') {
+      SkillPathAuth.getUser().then(user => {
+        if (user) {
+          client.from('planner_tasks').insert({
+            id: taskId,
+            user_id: user.id,
+            day,
+            task_text: newTask.text,
+            completed: false,
+            priority
+          }).then(({ error }) => {
+            if (error) console.error('Supabase planner insert error:', error);
+          });
+        }
+      });
     }
+
     return newTask;
   },
 
   togglePlannerTask(day, taskId) {
     const data = this.getData();
     if (!data.planner || !data.planner[day]) return false;
-    const task = data.planner[day].find(t => t.id === taskId || t.cloudId === taskId);
+    const task = data.planner[day].find(t => t.id === taskId);
     if (!task) return false;
 
     task.completed = !task.completed;
     this.saveData(data);
-    if (typeof SkillPathCloud !== 'undefined') {
-      SkillPathCloud.togglePlannerTask(taskId, task.completed);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client) {
+      client.from('planner_tasks').update({
+        completed: task.completed
+      }).eq('id', taskId).then(({ error }) => {
+        if (error) console.error('Supabase planner toggle error:', error);
+      });
     }
+
     return task.completed;
   },
 
   deletePlannerTask(day, taskId) {
     const data = this.getData();
     if (!data.planner || !data.planner[day]) return false;
-    data.planner[day] = data.planner[day].filter(t => t.id !== taskId && t.cloudId !== taskId);
+    data.planner[day] = data.planner[day].filter(t => t.id !== taskId);
     this.saveData(data);
-    if (typeof SkillPathCloud !== 'undefined') {
-      SkillPathCloud.deletePlannerTask(taskId);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client) {
+      client.from('planner_tasks').delete().eq('id', taskId).then(({ error }) => {
+        if (error) console.error('Supabase planner delete error:', error);
+      });
     }
+
     return true;
   },
 
@@ -789,9 +1308,19 @@ const SkillPathDB = {
       Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: []
     };
     this.saveData(data);
-    if (typeof SkillPathCloud !== 'undefined') {
-      SkillPathCloud.clearPlannerTasks();
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client && typeof SkillPathAuth !== 'undefined') {
+      SkillPathAuth.getUser().then(user => {
+        if (user) {
+          client.from('planner_tasks').delete().eq('user_id', user.id).then(({ error }) => {
+            if (error) console.error('Supabase clear planner error:', error);
+          });
+        }
+      });
     }
+
     return true;
   },
 
@@ -805,7 +1334,7 @@ const SkillPathDB = {
     if (!data.skills) data.skills = [];
 
     const newSkill = {
-      id: 'sk_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      id: generateUUID(),
       name: name.trim(),
       category: category ? category.trim() : 'General',
       level: level || 'Beginner'
@@ -833,8 +1362,9 @@ const SkillPathDB = {
     const data = this.getData();
     if (!data.resources) data.resources = [];
 
+    const resId = generateUUID();
     const newResource = {
-      id: 'res_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      id: resId,
       title: title.trim(),
       url: url.trim(),
       domain: domain ? domain.trim() : 'General',
@@ -843,20 +1373,43 @@ const SkillPathDB = {
 
     data.resources.push(newResource);
     this.saveData(data);
-    if (typeof SkillPathCloud !== 'undefined') {
-      SkillPathCloud.saveResource(newResource);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client && typeof SkillPathAuth !== 'undefined') {
+      SkillPathAuth.getUser().then(user => {
+        if (user) {
+          client.from('resources').insert({
+            id: resId,
+            user_id: user.id,
+            title: newResource.title,
+            url: newResource.url,
+            domain: newResource.domain,
+            notes: newResource.notes
+          }).then(({ error }) => {
+            if (error) console.error('Supabase resource insert error:', error);
+          });
+        }
+      });
     }
+
     return newResource;
   },
 
   deleteResource(id) {
     const data = this.getData();
     if (!data.resources) return false;
-    data.resources = data.resources.filter(r => r.id !== id && r.cloudId !== id);
+    data.resources = data.resources.filter(r => r.id !== id);
     this.saveData(data);
-    if (typeof SkillPathCloud !== 'undefined') {
-      SkillPathCloud.deleteResource(id);
+
+    // Persist to Supabase
+    const client = window.supabaseClient;
+    if (client) {
+      client.from('resources').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase resource delete error:', error);
+      });
     }
+
     return true;
   },
 
@@ -965,127 +1518,6 @@ function escapeHTML(str) {
 }
 
 /**
- * Supabase Auth Navbar & Dialog Controller
- */
-async function initAuthNavbar() {
-  const container = document.getElementById('navAuthContainer');
-  if (!container || typeof SkillPathAuth === 'undefined') return;
-
-  const user = await SkillPathAuth.getUser();
-
-  if (user) {
-    const emailPrefix = user.email ? user.email.split('@')[0] : 'User';
-    container.innerHTML = `
-      <div class="user-profile-badge" title="${escapeHTML(user.email)}">
-        <div class="user-avatar-icon">👤</div>
-        <span class="user-email-text">${escapeHTML(emailPrefix)}</span>
-      </div>
-      <span class="cloud-sync-badge synced" title="Connected to Supabase Cloud">☁️ Synced</span>
-      <button id="btnSignOut" class="btn btn-outline btn-sm">Log Out</button>
-    `;
-
-    const btnSignOut = document.getElementById('btnSignOut');
-    if (btnSignOut) {
-      btnSignOut.onclick = async () => {
-        try {
-          await SkillPathAuth.signOut();
-          showToast('Signed out successfully.', 'info');
-          setTimeout(() => window.location.reload(), 600);
-        } catch (e) {
-          showToast('Sign out error: ' + e.message, 'error');
-        }
-      };
-    }
-  } else {
-    container.innerHTML = `
-      <span class="cloud-sync-badge local" title="Data stored locally on this device">💾 Local</span>
-      <button id="btnOpenAuthModal" class="btn btn-outline btn-sm">🔑 Sign In</button>
-    `;
-
-    const btnOpenAuth = document.getElementById('btnOpenAuthModal');
-    if (btnOpenAuth) {
-      btnOpenAuth.onclick = () => {
-        openModal('modalAuth');
-      };
-    }
-  }
-
-  setupAuthModalListeners();
-}
-
-function setupAuthModalListeners() {
-  const tabSignIn = document.getElementById('tabBtnSignIn');
-  const tabSignUp = document.getElementById('tabBtnSignUp');
-  const authModeInput = document.getElementById('authMode');
-  const groupFullName = document.getElementById('groupFullName');
-  const authSubmitText = document.getElementById('authSubmitText');
-  const authAlert = document.getElementById('authAlert');
-  const formAuth = document.getElementById('formAuth');
-
-  if (tabSignIn && tabSignUp && formAuth) {
-    tabSignIn.onclick = () => {
-      tabSignIn.classList.add('active');
-      tabSignUp.classList.remove('active');
-      authModeInput.value = 'signin';
-      if (groupFullName) groupFullName.style.display = 'none';
-      if (authSubmitText) authSubmitText.textContent = 'Sign In';
-      if (authAlert) authAlert.style.display = 'none';
-    };
-
-    tabSignUp.onclick = () => {
-      tabSignUp.classList.add('active');
-      tabSignIn.classList.remove('active');
-      authModeInput.value = 'signup';
-      if (groupFullName) groupFullName.style.display = 'block';
-      if (authSubmitText) authSubmitText.textContent = 'Create Account';
-      if (authAlert) authAlert.style.display = 'none';
-    };
-
-    formAuth.onsubmit = async (e) => {
-      e.preventDefault();
-      const mode = authModeInput.value;
-      const email = document.getElementById('authEmail').value.trim();
-      const password = document.getElementById('authPassword').value;
-      const fullName = document.getElementById('authFullName') ? document.getElementById('authFullName').value.trim() : '';
-      const submitBtn = document.getElementById('btnAuthSubmit');
-
-      if (!email || !password) return;
-
-      submitBtn.classList.add('btn-loading');
-      submitBtn.disabled = true;
-      if (authAlert) authAlert.style.display = 'none';
-
-      try {
-        if (mode === 'signup') {
-          await SkillPathAuth.signUp(email, password, fullName);
-          submitBtn.classList.remove('btn-loading');
-          submitBtn.disabled = false;
-          closeModal('modalAuth');
-          showToast('Account registered! Safe cloud sync initiated.', 'success');
-          await SkillPathMigrate.migrateLocalDataToCloud();
-          setTimeout(() => window.location.reload(), 800);
-        } else {
-          await SkillPathAuth.signIn(email, password);
-          submitBtn.classList.remove('btn-loading');
-          submitBtn.disabled = false;
-          closeModal('modalAuth');
-          showToast('Welcome back! Cloud sync active.', 'success');
-          await SkillPathDB.syncWithCloud();
-          setTimeout(() => window.location.reload(), 800);
-        }
-      } catch (err) {
-        submitBtn.classList.remove('btn-loading');
-        submitBtn.disabled = false;
-        if (authAlert) {
-          authAlert.textContent = err.message || 'Authentication error';
-          authAlert.style.display = 'block';
-        }
-      }
-    };
-  }
-}
-
-/**
  * Navigation Bar Initialization
  */
 function initNavigation() {
@@ -1133,7 +1565,9 @@ function initNavigation() {
   }
 
   // Supabase Auth Integration in Navbar
-  initAuthNavbar();
+  if (typeof SkillPathAuth !== 'undefined') {
+    SkillPathAuth.renderNavbarAuth();
+  }
 }
 
 /**
@@ -1142,19 +1576,21 @@ function initNavigation() {
  * ============================================================================
  */
 async function initDashboard() {
+  if (typeof SkillPathAuth !== 'undefined') {
+    const user = await SkillPathAuth.requireAuth();
+    if (!user) return;
+  }
+
   initNavigation();
   renderDashboardStats();
   renderDomainsGrid();
   setupAddDomainModal();
   setupQuickAddChips();
 
-  // Background Cloud Sync
-  SkillPathDB.syncWithCloud().then(hasUpdates => {
-    if (hasUpdates) {
-      renderDashboardStats();
-      renderDomainsGrid();
-    }
-  });
+  // Load user roadmaps from Supabase
+  await SkillPathDB.loadFromSupabase();
+  renderDashboardStats();
+  renderDomainsGrid();
 }
 
 function renderDashboardStats() {
@@ -1367,6 +1803,11 @@ function setupQuickAddChips() {
  * ============================================================================
  */
 async function initDomainView() {
+  if (typeof SkillPathAuth !== 'undefined') {
+    const user = await SkillPathAuth.requireAuth();
+    if (!user) return;
+  }
+
   initNavigation();
 
   const params = new URLSearchParams(window.location.search);
@@ -1378,6 +1819,9 @@ async function initDomainView() {
     return;
   }
 
+  // Load fresh roadmap data from Supabase
+  await SkillPathDB.loadFromSupabase();
+
   const domain = SkillPathDB.getDomain(domainId);
   if (!domain) {
     showToast('Domain roadmap not found. Returning to dashboard.', 'error');
@@ -1388,13 +1832,6 @@ async function initDomainView() {
   renderDomainHeader(domain);
   renderStages(domain);
   setupRoadmapModals(domain);
-
-  // Background Cloud Sync
-  SkillPathDB.syncWithCloud().then(hasUpdates => {
-    if (hasUpdates) {
-      refreshDomainView(domainId);
-    }
-  });
 }
 
 function renderDomainHeader(domain) {
@@ -1778,18 +2215,20 @@ function setupRoadmapModals(domain) {
  * ============================================================================
  */
 async function initPlannerView() {
+  if (typeof SkillPathAuth !== 'undefined') {
+    const user = await SkillPathAuth.requireAuth();
+    if (!user) return;
+  }
+
   initNavigation();
   renderWeeklyPlanner();
   renderSkillsTable();
   setupPlannerEvents();
   setupSkillsEvents();
 
-  // Background Cloud Sync
-  SkillPathDB.syncWithCloud().then(hasUpdates => {
-    if (hasUpdates) {
-      renderWeeklyPlanner();
-    }
-  });
+  // Load user planner tasks from Supabase and refresh view
+  await SkillPathDB.loadFromSupabase();
+  renderWeeklyPlanner();
 }
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -1963,16 +2402,18 @@ function setupSkillsEvents() {
  * ============================================================================
  */
 async function initResourcesView() {
+  if (typeof SkillPathAuth !== 'undefined') {
+    const user = await SkillPathAuth.requireAuth();
+    if (!user) return;
+  }
+
   initNavigation();
   renderResourcesGrid();
   setupResourcesEvents();
 
-  // Background Cloud Sync
-  SkillPathDB.syncWithCloud().then(hasUpdates => {
-    if (hasUpdates) {
-      renderResourcesGrid();
-    }
-  });
+  // Load user saved resources from Supabase and refresh view
+  await SkillPathDB.loadFromSupabase();
+  renderResourcesGrid();
 }
 
 function renderResourcesGrid(searchTerm = '', filterDomain = 'ALL') {

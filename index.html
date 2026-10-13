@@ -9,9 +9,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <!-- Supabase Client SDK -->
+  <!-- Supabase CDN & Config -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-client.js"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
 </head>
 <body>
 
@@ -223,50 +224,6 @@
     </div>
   </div>
 
-  <!-- Modal: Supabase Auth (Sign In / Register) -->
-  <div id="modalAuth" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
-    <div class="modal-card" style="max-width: 440px;">
-      <div class="modal-header">
-        <h3 id="authModalTitle" class="modal-title">Account & Cloud Sync</h3>
-        <button class="modal-close" onclick="closeModal('modalAuth')" aria-label="Close dialog">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="auth-tabs">
-          <button type="button" class="auth-tab-btn active" id="tabBtnSignIn">Sign In</button>
-          <button type="button" class="auth-tab-btn" id="tabBtnSignUp">Register</button>
-        </div>
-
-        <div id="authAlert" class="auth-error-alert" role="alert"></div>
-
-        <form id="formAuth">
-          <input type="hidden" id="authMode" value="signin">
-
-          <div class="form-group" id="groupFullName" style="display: none;">
-            <label for="authFullName" class="form-label">Full Name</label>
-            <input type="text" id="authFullName" class="form-control" placeholder="e.g. Alex Chen">
-          </div>
-
-          <div class="form-group">
-            <label for="authEmail" class="form-label">Email Address <span class="req">*</span></label>
-            <input type="email" id="authEmail" class="form-control" placeholder="student@example.com" required autocomplete="email">
-          </div>
-
-          <div class="form-group">
-            <label for="authPassword" class="form-label">Password <span class="req">*</span></label>
-            <input type="password" id="authPassword" class="form-control" placeholder="Minimum 6 characters" minlength="6" required autocomplete="current-password">
-          </div>
-
-          <button type="submit" id="btnAuthSubmit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">
-            <span id="authSubmitText">Sign In</span>
-          </button>
-        </form>
-
-        <p style="font-size: 0.8rem; color: var(--text-dim); text-align: center; margin-top: 1rem;">
-          Secured with Supabase Authentication & Row Level Security.
-        </p>
-      </div>
-    </div>
-  </div>
 
   <!-- Footer -->
   <footer class="footer">

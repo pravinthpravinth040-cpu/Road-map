@@ -1,26 +1,23 @@
 -- ============================================================================
--- SkillPath - Complete Supabase Database Schema & Migration
--- ============================================================================
--- Run this entire script in your Supabase Dashboard:
--- SQL Editor -> New Query -> Paste & Run
+-- SkillPath - Complete Supabase Database Schema
+-- Run this in your Supabase SQL Editor:
+-- https://supabase.com/dashboard/project/gixtsahnwyckrdsxgbdn/sql/new
 -- ============================================================================
 
--- Enable pgcrypto for UUID generation if not already enabled
+-- Enable pgcrypto extension for UUID generation
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ----------------------------------------------------------------------------
 -- 1. PROFILES TABLE
+-- Linked directly to Supabase Auth users
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    email TEXT,
-    full_name TEXT,
-    avatar_url TEXT,
+    full_name TEXT DEFAULT '',
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
--- Profiles RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
@@ -39,95 +36,54 @@ CREATE POLICY "Users can insert own profile"
     WITH CHECK (auth.uid() = id);
 
 -- ----------------------------------------------------------------------------
--- 2. SAVED_DOMAINS TABLE
--- Stores top-level domains created by or saved for each user
+-- 2. DOMAINS TABLE
+-- Custom IT career learning tracks created by users
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.saved_domains (
+CREATE TABLE IF NOT EXISTS public.domains (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
     icon TEXT DEFAULT '🎯',
     color TEXT DEFAULT '#6366f1',
+    local_id TEXT, -- Preserves localStorage ID for smooth one-time migration
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     UNIQUE(user_id, name)
 );
 
-ALTER TABLE public.saved_domains ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.domains ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Users can manage own saved domains (select)" ON public.saved_domains;
-CREATE POLICY "Users can manage own saved domains (select)"
-    ON public.saved_domains FOR SELECT
+DROP POLICY IF EXISTS "Users can select own domains" ON public.domains;
+CREATE POLICY "Users can select own domains"
+    ON public.domains FOR SELECT
     USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can manage own saved domains (insert)" ON public.saved_domains;
-CREATE POLICY "Users can manage own saved domains (insert)"
-    ON public.saved_domains FOR INSERT
+DROP POLICY IF EXISTS "Users can insert own domains" ON public.domains;
+CREATE POLICY "Users can insert own domains"
+    ON public.domains FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can manage own saved domains (update)" ON public.saved_domains;
-CREATE POLICY "Users can manage own saved domains (update)"
-    ON public.saved_domains FOR UPDATE
+DROP POLICY IF EXISTS "Users can update own domains" ON public.domains;
+CREATE POLICY "Users can update own domains"
+    ON public.domains FOR UPDATE
     USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can manage own saved domains (delete)" ON public.saved_domains;
-CREATE POLICY "Users can manage own saved domains (delete)"
-    ON public.saved_domains FOR DELETE
+DROP POLICY IF EXISTS "Users can delete own domains" ON public.domains;
+CREATE POLICY "Users can delete own domains"
+    ON public.domains FOR DELETE
     USING (auth.uid() = user_id);
 
-CREATE INDEX IF NOT EXISTS idx_saved_domains_user_id ON public.saved_domains(user_id);
+CREATE INDEX IF NOT EXISTS idx_domains_user_id ON public.domains(user_id);
 
 -- ----------------------------------------------------------------------------
--- 3. ROADMAPS TABLE
--- Stores custom roadmaps belonging to users
+-- 3. STAGES TABLE
+-- Curricular milestones / stages under each domain
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.roadmaps (
+CREATE TABLE IF NOT EXISTS public.stages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-    domain_id UUID REFERENCES public.saved_domains(id) ON DELETE SET NULL,
-    name TEXT NOT NULL,
-    description TEXT DEFAULT '',
-    icon TEXT DEFAULT '🎯',
-    color TEXT DEFAULT '#6366f1',
-    local_id TEXT, -- Preserves original localStorage ID for idempotent sync
-    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
-);
-
-ALTER TABLE public.roadmaps ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Users can select own roadmaps" ON public.roadmaps;
-CREATE POLICY "Users can select own roadmaps"
-    ON public.roadmaps FOR SELECT
-    USING (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can insert own roadmaps" ON public.roadmaps;
-CREATE POLICY "Users can insert own roadmaps"
-    ON public.roadmaps FOR INSERT
-    WITH CHECK (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can update own roadmaps" ON public.roadmaps;
-CREATE POLICY "Users can update own roadmaps"
-    ON public.roadmaps FOR UPDATE
-    USING (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can delete own roadmaps" ON public.roadmaps;
-CREATE POLICY "Users can delete own roadmaps"
-    ON public.roadmaps FOR DELETE
-    USING (auth.uid() = user_id);
-
-CREATE INDEX IF NOT EXISTS idx_roadmaps_user_id ON public.roadmaps(user_id);
-CREATE INDEX IF NOT EXISTS idx_roadmaps_local_id ON public.roadmaps(local_id);
-
--- ----------------------------------------------------------------------------
--- 4. ROADMAP_STAGES TABLE
--- Stages / milestones within each roadmap
--- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.roadmap_stages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-    roadmap_id UUID REFERENCES public.roadmaps(id) ON DELETE CASCADE NOT NULL,
+    domain_id UUID REFERENCES public.domains(id) ON DELETE CASCADE NOT NULL,
     title TEXT NOT NULL,
     weeks INTEGER DEFAULT 1,
     position INTEGER DEFAULT 0,
@@ -135,40 +91,39 @@ CREATE TABLE IF NOT EXISTS public.roadmap_stages (
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
-ALTER TABLE public.roadmap_stages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.stages ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Users can select own roadmap stages" ON public.roadmap_stages;
-CREATE POLICY "Users can select own roadmap stages"
-    ON public.roadmap_stages FOR SELECT
+DROP POLICY IF EXISTS "Users can select own stages" ON public.stages;
+CREATE POLICY "Users can select own stages"
+    ON public.stages FOR SELECT
     USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can insert own roadmap stages" ON public.roadmap_stages;
-CREATE POLICY "Users can insert own roadmap stages"
-    ON public.roadmap_stages FOR INSERT
+DROP POLICY IF EXISTS "Users can insert own stages" ON public.stages;
+CREATE POLICY "Users can insert own stages"
+    ON public.stages FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can update own roadmap stages" ON public.roadmap_stages;
-CREATE POLICY "Users can update own roadmap stages"
-    ON public.roadmap_stages FOR UPDATE
+DROP POLICY IF EXISTS "Users can update own stages" ON public.stages;
+CREATE POLICY "Users can update own stages"
+    ON public.stages FOR UPDATE
     USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can delete own roadmap stages" ON public.roadmap_stages;
-CREATE POLICY "Users can delete own roadmap stages"
-    ON public.roadmap_stages FOR DELETE
+DROP POLICY IF EXISTS "Users can delete own stages" ON public.stages;
+CREATE POLICY "Users can delete own stages"
+    ON public.stages FOR DELETE
     USING (auth.uid() = user_id);
 
-CREATE INDEX IF NOT EXISTS idx_roadmap_stages_roadmap ON public.roadmap_stages(roadmap_id);
-CREATE INDEX IF NOT EXISTS idx_roadmap_stages_user ON public.roadmap_stages(user_id);
+CREATE INDEX IF NOT EXISTS idx_stages_domain_id ON public.stages(domain_id);
+CREATE INDEX IF NOT EXISTS idx_stages_user_id ON public.stages(user_id);
 
 -- ----------------------------------------------------------------------------
--- 5. USER_PROGRESS TABLE
--- Topics & mini projects tracked under stages
+-- 4. TOPICS TABLE
+-- Learning topics and documentation milestones under each stage
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.user_progress (
+CREATE TABLE IF NOT EXISTS public.topics (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-    stage_id UUID REFERENCES public.roadmap_stages(id) ON DELETE CASCADE NOT NULL,
-    item_type TEXT NOT NULL CHECK (item_type IN ('topic', 'project')),
+    stage_id UUID REFERENCES public.stages(id) ON DELETE CASCADE NOT NULL,
     title TEXT NOT NULL,
     link TEXT DEFAULT '',
     completed BOOLEAN DEFAULT false,
@@ -178,34 +133,76 @@ CREATE TABLE IF NOT EXISTS public.user_progress (
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
-ALTER TABLE public.user_progress ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.topics ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Users can select own progress items" ON public.user_progress;
-CREATE POLICY "Users can select own progress items"
-    ON public.user_progress FOR SELECT
+DROP POLICY IF EXISTS "Users can select own topics" ON public.topics;
+CREATE POLICY "Users can select own topics"
+    ON public.topics FOR SELECT
     USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can insert own progress items" ON public.user_progress;
-CREATE POLICY "Users can insert own progress items"
-    ON public.user_progress FOR INSERT
+DROP POLICY IF EXISTS "Users can insert own topics" ON public.topics;
+CREATE POLICY "Users can insert own topics"
+    ON public.topics FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can update own progress items" ON public.user_progress;
-CREATE POLICY "Users can update own progress items"
-    ON public.user_progress FOR UPDATE
+DROP POLICY IF EXISTS "Users can update own topics" ON public.topics;
+CREATE POLICY "Users can update own topics"
+    ON public.topics FOR UPDATE
     USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can delete own progress items" ON public.user_progress;
-CREATE POLICY "Users can delete own progress items"
-    ON public.user_progress FOR DELETE
+DROP POLICY IF EXISTS "Users can delete own topics" ON public.topics;
+CREATE POLICY "Users can delete own topics"
+    ON public.topics FOR DELETE
     USING (auth.uid() = user_id);
 
-CREATE INDEX IF NOT EXISTS idx_user_progress_stage ON public.user_progress(stage_id);
-CREATE INDEX IF NOT EXISTS idx_user_progress_user ON public.user_progress(user_id);
+CREATE INDEX IF NOT EXISTS idx_topics_stage_id ON public.topics(stage_id);
+CREATE INDEX IF NOT EXISTS idx_topics_user_id ON public.topics(user_id);
+
+-- ----------------------------------------------------------------------------
+-- 5. PROJECTS TABLE
+-- Practical mini-projects under each stage
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    stage_id UUID REFERENCES public.stages(id) ON DELETE CASCADE NOT NULL,
+    title TEXT NOT NULL,
+    link TEXT DEFAULT '',
+    completed BOOLEAN DEFAULT false,
+    position INTEGER DEFAULT 0,
+    local_id TEXT,
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can select own projects" ON public.projects;
+CREATE POLICY "Users can select own projects"
+    ON public.projects FOR SELECT
+    USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own projects" ON public.projects;
+CREATE POLICY "Users can insert own projects"
+    ON public.projects FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own projects" ON public.projects;
+CREATE POLICY "Users can update own projects"
+    ON public.projects FOR UPDATE
+    USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own projects" ON public.projects;
+CREATE POLICY "Users can delete own projects"
+    ON public.projects FOR DELETE
+    USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_projects_stage_id ON public.projects(stage_id);
+CREATE INDEX IF NOT EXISTS idx_projects_user_id ON public.projects(user_id);
 
 -- ----------------------------------------------------------------------------
 -- 6. PLANNER_TASKS TABLE
--- Weekly study planner tasks (Mon - Sun)
+-- Weekly study planner tasks (Monday - Sunday)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.planner_tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -243,10 +240,10 @@ CREATE POLICY "Users can delete own planner tasks"
 CREATE INDEX IF NOT EXISTS idx_planner_tasks_user_day ON public.planner_tasks(user_id, day);
 
 -- ----------------------------------------------------------------------------
--- 7. BOOKMARKED_RESOURCES TABLE
+-- 7. RESOURCES TABLE
 -- Curated learning bookmarks, courses, and documentation
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.bookmarked_resources (
+CREATE TABLE IF NOT EXISTS public.resources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
     title TEXT NOT NULL,
@@ -257,52 +254,47 @@ CREATE TABLE IF NOT EXISTS public.bookmarked_resources (
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
-ALTER TABLE public.bookmarked_resources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.resources ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Users can select own bookmarks" ON public.bookmarked_resources;
-CREATE POLICY "Users can select own bookmarks"
-    ON public.bookmarked_resources FOR SELECT
+DROP POLICY IF EXISTS "Users can select own resources" ON public.resources;
+CREATE POLICY "Users can select own resources"
+    ON public.resources FOR SELECT
     USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can insert own bookmarks" ON public.bookmarked_resources;
-CREATE POLICY "Users can insert own bookmarks"
-    ON public.bookmarked_resources FOR INSERT
+DROP POLICY IF EXISTS "Users can insert own resources" ON public.resources;
+CREATE POLICY "Users can insert own resources"
+    ON public.resources FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can update own bookmarks" ON public.bookmarked_resources;
-CREATE POLICY "Users can update own bookmarks"
-    ON public.bookmarked_resources FOR UPDATE
+DROP POLICY IF EXISTS "Users can update own resources" ON public.resources;
+CREATE POLICY "Users can update own resources"
+    ON public.resources FOR UPDATE
     USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can delete own bookmarks" ON public.bookmarked_resources;
-CREATE POLICY "Users can delete own bookmarks"
-    ON public.bookmarked_resources FOR DELETE
+DROP POLICY IF EXISTS "Users can delete own resources" ON public.resources;
+CREATE POLICY "Users can delete own resources"
+    ON public.resources FOR DELETE
     USING (auth.uid() = user_id);
 
-CREATE INDEX IF NOT EXISTS idx_bookmarked_resources_user ON public.bookmarked_resources(user_id);
+CREATE INDEX IF NOT EXISTS idx_resources_user_id ON public.resources(user_id);
 
 -- ----------------------------------------------------------------------------
--- 8. AUTH TRIGGER: AUTOMATIC PROFILE CREATION ON SIGNUP
+-- 8. AUTH TRIGGER: AUTO-PROFILE CREATION ON USER SIGNUP
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO public.profiles (id, email, full_name, avatar_url)
+    INSERT INTO public.profiles (id, full_name)
     VALUES (
         NEW.id,
-        NEW.email,
-        COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
-        COALESCE(NEW.raw_user_meta_data->>'avatar_url', '')
+        COALESCE(NEW.raw_user_meta_data->>'full_name', '')
     )
     ON CONFLICT (id) DO NOTHING;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Bind trigger to auth.users
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Schema definition complete.
