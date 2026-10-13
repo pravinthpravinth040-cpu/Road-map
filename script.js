@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * SkillPath - Learning Roadmap & Progress Tracker
- * Core JavaScript Architecture (Plain Vanilla JS, LocalStorage Persistent)
+ * Core JavaScript Architecture with Supabase Cloud Sync & LocalStorage Fallback
  * ============================================================================
  */
 
@@ -240,10 +240,10 @@ const QUICK_ADD_TEMPLATES = {
 };
 
 /**
- * SkillPath Database Layer
+ * SkillPath Database Layer (Local Cache + Supabase Cloud Sync)
  */
 const SkillPathDB = {
-  // Retrieve entire storage
+  // Retrieve storage from localStorage
   getData() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -257,7 +257,7 @@ const SkillPathDB = {
     }
   },
 
-  // Save entire storage
+  // Save to localStorage
   saveData(data) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -268,22 +268,96 @@ const SkillPathDB = {
     }
   },
 
-  // Initial empty data structure (Starts with empty domains as required)
   getDefaultData() {
     return {
       domains: [],
       planner: {
-        Monday: [],
-        Tuesday: [],
-        Wednesday: [],
-        Thursday: [],
-        Friday: [],
-        Saturday: [],
-        Sunday: []
+        Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: []
       },
       skills: [],
       resources: []
     };
+  },
+
+  // Background Cloud Sync Trigger
+  triggerCloudSyncDomain(domain) {
+    if (typeof SkillPathAuth !== 'undefined' && typeof SkillPathCloud !== 'undefined') {
+      SkillPathAuth.getUser().then(user => {
+        if (user) {
+          SkillPathCloud.saveRoadmap(domain);
+        }
+      }).catch(() => {});
+    }
+  },
+
+  triggerCloudDeleteDomain(domainId) {
+    if (typeof SkillPathAuth !== 'undefined' && typeof SkillPathCloud !== 'undefined') {
+      SkillPathAuth.getUser().then(user => {
+        if (user) {
+          SkillPathCloud.deleteRoadmap(domainId);
+        }
+      }).catch(() => {});
+    }
+  },
+
+  /**
+   * Sync with Supabase Cloud:
+   * Pulls user's cloud roadmaps, tasks, and resources.
+   * If user has local items and cloud is empty, migrates local items to cloud.
+   */
+  async syncWithCloud() {
+    if (typeof SkillPathAuth === 'undefined' || typeof SkillPathCloud === 'undefined') return false;
+
+    try {
+      const user = await SkillPathAuth.getUser();
+      if (!user) return false;
+
+      const isReady = await SkillPathCloud.isCloudAvailable();
+      if (!isReady) {
+        console.info('Supabase database tables are not ready or RLS is configured.');
+        return false;
+      }
+
+      const cloudRoadmaps = await SkillPathCloud.fetchRoadmaps();
+      const localData = this.getData();
+      let hasChanges = false;
+
+      // Safe migration for initial cloud login
+      if (localData.domains && localData.domains.length > 0 && (!cloudRoadmaps || cloudRoadmaps.length === 0)) {
+        await SkillPathMigrate.migrateLocalDataToCloud();
+        const migrated = await SkillPathCloud.fetchRoadmaps();
+        if (migrated && migrated.length > 0) {
+          localData.domains = migrated;
+          hasChanges = true;
+        }
+      } else if (cloudRoadmaps && cloudRoadmaps.length > 0) {
+        localData.domains = cloudRoadmaps;
+        hasChanges = true;
+      }
+
+      // Sync Planner Tasks
+      const cloudPlanner = await SkillPathCloud.fetchPlannerTasks();
+      if (cloudPlanner) {
+        localData.planner = cloudPlanner;
+        hasChanges = true;
+      }
+
+      // Sync Resources
+      const cloudRes = await SkillPathCloud.fetchResources();
+      if (cloudRes && cloudRes.length > 0) {
+        localData.resources = cloudRes;
+        hasChanges = true;
+      }
+
+      if (hasChanges) {
+        this.saveData(localData);
+      }
+
+      return hasChanges;
+    } catch (e) {
+      console.warn('Sync with cloud error:', e);
+      return false;
+    }
   },
 
   // Domains Management
@@ -293,12 +367,11 @@ const SkillPathDB = {
 
   getDomain(id) {
     const domains = this.getDomains();
-    return domains.find(d => d.id === id) || null;
+    return domains.find(d => d.id === id || d.cloudId === id) || null;
   },
 
   addDomain({ name, description, icon, color }) {
     const data = this.getData();
-    // Validate uniqueness
     const exists = data.domains.some(d => d.name.trim().toLowerCase() === name.trim().toLowerCase());
     if (exists) {
       return { success: false, error: 'A domain with this name already exists.' };
@@ -315,6 +388,7 @@ const SkillPathDB = {
 
     data.domains.push(newDomain);
     this.saveData(data);
+    this.triggerCloudSyncDomain(newDomain);
     return { success: true, domain: newDomain };
   },
 
@@ -333,15 +407,15 @@ const SkillPathDB = {
 
     data.domains.push(newDomain);
     this.saveData(data);
+    this.triggerCloudSyncDomain(newDomain);
     return { success: true, domain: newDomain };
   },
 
   updateDomain(id, { name, description, icon, color }) {
     const data = this.getData();
-    const index = data.domains.findIndex(d => d.id === id);
+    const index = data.domains.findIndex(d => d.id === id || d.cloudId === id);
     if (index === -1) return { success: false, error: 'Domain not found.' };
 
-    // Check duplicate name excluding self
     const duplicate = data.domains.some((d, idx) => idx !== index && d.name.trim().toLowerCase() === name.trim().toLowerCase());
     if (duplicate) {
       return { success: false, error: 'Another domain already uses this name.' };
@@ -353,24 +427,26 @@ const SkillPathDB = {
     data.domains[index].color = color || data.domains[index].color || '#6366f1';
 
     this.saveData(data);
+    this.triggerCloudSyncDomain(data.domains[index]);
     return { success: true, domain: data.domains[index] };
   },
 
   deleteDomain(id) {
     const data = this.getData();
     const initialLength = data.domains.length;
-    data.domains = data.domains.filter(d => d.id !== id);
+    data.domains = data.domains.filter(d => d.id !== id && d.cloudId !== id);
     if (data.domains.length === initialLength) {
       return { success: false, error: 'Domain not found.' };
     }
     this.saveData(data);
+    this.triggerCloudDeleteDomain(id);
     return { success: true };
   },
 
   // Roadmap Stages Management
   addStage(domainId, { title, weeks }) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId);
+    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
     if (!domain) return { success: false, error: 'Domain not found.' };
 
     const newStage = {
@@ -384,39 +460,42 @@ const SkillPathDB = {
     if (!domain.stages) domain.stages = [];
     domain.stages.push(newStage);
     this.saveData(data);
+    this.triggerCloudSyncDomain(domain);
     return { success: true, stage: newStage };
   },
 
   updateStage(domainId, stageId, { title, weeks }) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId);
+    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
     if (!domain) return { success: false, error: 'Domain not found.' };
 
-    const stage = domain.stages.find(s => s.id === stageId);
+    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
     if (!stage) return { success: false, error: 'Stage not found.' };
 
     stage.title = title.trim();
     stage.weeks = parseInt(weeks, 10) || 1;
     this.saveData(data);
+    this.triggerCloudSyncDomain(domain);
     return { success: true, stage };
   },
 
   deleteStage(domainId, stageId) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId);
+    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
     if (!domain) return { success: false, error: 'Domain not found.' };
 
-    domain.stages = domain.stages.filter(s => s.id !== stageId);
+    domain.stages = domain.stages.filter(s => s.id !== stageId && s.cloudId !== stageId);
     this.saveData(data);
+    this.triggerCloudSyncDomain(domain);
     return { success: true };
   },
 
   moveStage(domainId, stageId, direction) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId);
+    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
     if (!domain || !domain.stages) return false;
 
-    const idx = domain.stages.findIndex(s => s.id === stageId);
+    const idx = domain.stages.findIndex(s => s.id === stageId || s.cloudId === stageId);
     if (idx === -1) return false;
 
     if (direction === 'up' && idx > 0) {
@@ -424,24 +503,26 @@ const SkillPathDB = {
       domain.stages[idx] = domain.stages[idx - 1];
       domain.stages[idx - 1] = temp;
       this.saveData(data);
+      this.triggerCloudSyncDomain(domain);
       return true;
     } else if (direction === 'down' && idx < domain.stages.length - 1) {
       const temp = domain.stages[idx];
       domain.stages[idx] = domain.stages[idx + 1];
       domain.stages[idx + 1] = temp;
       this.saveData(data);
+      this.triggerCloudSyncDomain(domain);
       return true;
     }
     return false;
   },
 
-  // Stage Topics Management
+  // Topics Management
   addTopic(domainId, stageId, { title, link }) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId);
+    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
     if (!domain) return { success: false, error: 'Domain not found.' };
 
-    const stage = domain.stages.find(s => s.id === stageId);
+    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
     if (!stage) return { success: false, error: 'Stage not found.' };
 
     const newTopic = {
@@ -454,58 +535,65 @@ const SkillPathDB = {
     if (!stage.topics) stage.topics = [];
     stage.topics.push(newTopic);
     this.saveData(data);
+    this.triggerCloudSyncDomain(domain);
     return { success: true, topic: newTopic };
   },
 
   updateTopic(domainId, stageId, topicId, { title, link }) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId);
+    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
     if (!domain) return { success: false };
-    const stage = domain.stages.find(s => s.id === stageId);
+    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
     if (!stage) return { success: false };
-    const topic = stage.topics.find(t => t.id === topicId);
+    const topic = stage.topics.find(t => t.id === topicId || t.cloudId === topicId);
     if (!topic) return { success: false };
 
     topic.title = title.trim();
     topic.link = link ? link.trim() : '';
     this.saveData(data);
+    this.triggerCloudSyncDomain(domain);
     return { success: true, topic };
   },
 
   toggleTopic(domainId, stageId, topicId) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId);
+    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
     if (!domain) return false;
-    const stage = domain.stages.find(s => s.id === stageId);
+    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
     if (!stage) return false;
-    const topic = stage.topics.find(t => t.id === topicId);
+    const topic = stage.topics.find(t => t.id === topicId || t.cloudId === topicId);
     if (!topic) return false;
 
     topic.completed = !topic.completed;
     this.saveData(data);
+    this.triggerCloudSyncDomain(domain);
+    if (typeof SkillPathCloud !== 'undefined') {
+      SkillPathCloud.updateProgressCompletion(topicId, topic.completed);
+    }
     return topic.completed;
   },
 
   deleteTopic(domainId, stageId, topicId) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId);
+    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
     if (!domain) return false;
-    const stage = domain.stages.find(s => s.id === stageId);
+    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
     if (!stage) return false;
 
-    stage.topics = stage.topics.filter(t => t.id !== topicId);
+    stage.topics = stage.topics.filter(t => t.id !== topicId && t.cloudId !== topicId);
     this.saveData(data);
+    this.triggerCloudSyncDomain(domain);
     return true;
   },
 
   moveTopic(domainId, stageId, topicId, direction) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId);
+    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
     if (!domain) return false;
-    const stage = domain.stages.find(s => s.id === stageId);
+    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
     if (!stage || !stage.topics) return false;
 
-    const idx = stage.topics.findIndex(t => t.id === topicId);
+    const idx = stage.topics.findIndex(t => t.id === topicId || t.cloudId === topicId);
     if (idx === -1) return false;
 
     if (direction === 'up' && idx > 0) {
@@ -513,12 +601,14 @@ const SkillPathDB = {
       stage.topics[idx] = stage.topics[idx - 1];
       stage.topics[idx - 1] = temp;
       this.saveData(data);
+      this.triggerCloudSyncDomain(domain);
       return true;
     } else if (direction === 'down' && idx < stage.topics.length - 1) {
       const temp = stage.topics[idx];
       stage.topics[idx] = stage.topics[idx + 1];
       stage.topics[idx + 1] = temp;
       this.saveData(data);
+      this.triggerCloudSyncDomain(domain);
       return true;
     }
     return false;
@@ -527,10 +617,10 @@ const SkillPathDB = {
   // Projects Management
   addProject(domainId, stageId, { title, link }) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId);
+    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
     if (!domain) return { success: false, error: 'Domain not found.' };
 
-    const stage = domain.stages.find(s => s.id === stageId);
+    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
     if (!stage) return { success: false, error: 'Stage not found.' };
 
     const newProject = {
@@ -543,32 +633,38 @@ const SkillPathDB = {
     if (!stage.projects) stage.projects = [];
     stage.projects.push(newProject);
     this.saveData(data);
+    this.triggerCloudSyncDomain(domain);
     return { success: true, project: newProject };
   },
 
   toggleProject(domainId, stageId, projectId) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId);
+    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
     if (!domain) return false;
-    const stage = domain.stages.find(s => s.id === stageId);
+    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
     if (!stage) return false;
-    const project = stage.projects.find(p => p.id === projectId);
+    const project = stage.projects.find(p => p.id === projectId || p.cloudId === projectId);
     if (!project) return false;
 
     project.completed = !project.completed;
     this.saveData(data);
+    this.triggerCloudSyncDomain(domain);
+    if (typeof SkillPathCloud !== 'undefined') {
+      SkillPathCloud.updateProgressCompletion(projectId, project.completed);
+    }
     return project.completed;
   },
 
   deleteProject(domainId, stageId, projectId) {
     const data = this.getData();
-    const domain = data.domains.find(d => d.id === domainId);
+    const domain = data.domains.find(d => d.id === domainId || d.cloudId === domainId);
     if (!domain) return false;
-    const stage = domain.stages.find(s => s.id === stageId);
+    const stage = domain.stages.find(s => s.id === stageId || s.cloudId === stageId);
     if (!stage) return false;
 
-    stage.projects = stage.projects.filter(p => p.id !== projectId);
+    stage.projects = stage.projects.filter(p => p.id !== projectId && p.cloudId !== projectId);
     this.saveData(data);
+    this.triggerCloudSyncDomain(domain);
     return true;
   },
 
@@ -642,7 +738,7 @@ const SkillPathDB = {
     };
   },
 
-  addPlannerTask(day, text) {
+  addPlannerTask(day, text, priority = 'normal') {
     const data = this.getData();
     if (!data.planner) data.planner = {};
     if (!data.planner[day]) data.planner[day] = [];
@@ -650,30 +746,40 @@ const SkillPathDB = {
     const newTask = {
       id: 'pt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
       text: text.trim(),
-      completed: false
+      completed: false,
+      priority
     };
 
     data.planner[day].push(newTask);
     this.saveData(data);
+    if (typeof SkillPathCloud !== 'undefined') {
+      SkillPathCloud.savePlannerTask(day, newTask);
+    }
     return newTask;
   },
 
   togglePlannerTask(day, taskId) {
     const data = this.getData();
     if (!data.planner || !data.planner[day]) return false;
-    const task = data.planner[day].find(t => t.id === taskId);
+    const task = data.planner[day].find(t => t.id === taskId || t.cloudId === taskId);
     if (!task) return false;
 
     task.completed = !task.completed;
     this.saveData(data);
+    if (typeof SkillPathCloud !== 'undefined') {
+      SkillPathCloud.togglePlannerTask(taskId, task.completed);
+    }
     return task.completed;
   },
 
   deletePlannerTask(day, taskId) {
     const data = this.getData();
     if (!data.planner || !data.planner[day]) return false;
-    data.planner[day] = data.planner[day].filter(t => t.id !== taskId);
+    data.planner[day] = data.planner[day].filter(t => t.id !== taskId && t.cloudId !== taskId);
     this.saveData(data);
+    if (typeof SkillPathCloud !== 'undefined') {
+      SkillPathCloud.deletePlannerTask(taskId);
+    }
     return true;
   },
 
@@ -683,6 +789,9 @@ const SkillPathDB = {
       Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: []
     };
     this.saveData(data);
+    if (typeof SkillPathCloud !== 'undefined') {
+      SkillPathCloud.clearPlannerTasks();
+    }
     return true;
   },
 
@@ -734,14 +843,20 @@ const SkillPathDB = {
 
     data.resources.push(newResource);
     this.saveData(data);
+    if (typeof SkillPathCloud !== 'undefined') {
+      SkillPathCloud.saveResource(newResource);
+    }
     return newResource;
   },
 
   deleteResource(id) {
     const data = this.getData();
     if (!data.resources) return false;
-    data.resources = data.resources.filter(r => r.id !== id);
+    data.resources = data.resources.filter(r => r.id !== id && r.cloudId !== id);
     this.saveData(data);
+    if (typeof SkillPathCloud !== 'undefined') {
+      SkillPathCloud.deleteResource(id);
+    }
     return true;
   },
 
@@ -808,7 +923,7 @@ function openModal(modalId) {
   const modal = document.getElementById(modalId);
   if (modal) {
     modal.classList.add('open');
-    const firstInput = modal.querySelector('input, textarea, select');
+    const firstInput = modal.querySelector('input:not([type="hidden"]), textarea, select');
     if (firstInput) firstInput.focus();
     document.body.style.overflow = 'hidden';
   }
@@ -839,9 +954,6 @@ document.addEventListener('click', (e) => {
   }
 });
 
-/**
- * String HTML escape helper to prevent XSS
- */
 function escapeHTML(str) {
   if (!str) return '';
   return String(str)
@@ -853,7 +965,128 @@ function escapeHTML(str) {
 }
 
 /**
- * Mobile Navigation Toggle & Common Bar Init
+ * Supabase Auth Navbar & Dialog Controller
+ */
+async function initAuthNavbar() {
+  const container = document.getElementById('navAuthContainer');
+  if (!container || typeof SkillPathAuth === 'undefined') return;
+
+  const user = await SkillPathAuth.getUser();
+
+  if (user) {
+    const emailPrefix = user.email ? user.email.split('@')[0] : 'User';
+    container.innerHTML = `
+      <div class="user-profile-badge" title="${escapeHTML(user.email)}">
+        <div class="user-avatar-icon">👤</div>
+        <span class="user-email-text">${escapeHTML(emailPrefix)}</span>
+      </div>
+      <span class="cloud-sync-badge synced" title="Connected to Supabase Cloud">☁️ Synced</span>
+      <button id="btnSignOut" class="btn btn-outline btn-sm">Log Out</button>
+    `;
+
+    const btnSignOut = document.getElementById('btnSignOut');
+    if (btnSignOut) {
+      btnSignOut.onclick = async () => {
+        try {
+          await SkillPathAuth.signOut();
+          showToast('Signed out successfully.', 'info');
+          setTimeout(() => window.location.reload(), 600);
+        } catch (e) {
+          showToast('Sign out error: ' + e.message, 'error');
+        }
+      };
+    }
+  } else {
+    container.innerHTML = `
+      <span class="cloud-sync-badge local" title="Data stored locally on this device">💾 Local</span>
+      <button id="btnOpenAuthModal" class="btn btn-outline btn-sm">🔑 Sign In</button>
+    `;
+
+    const btnOpenAuth = document.getElementById('btnOpenAuthModal');
+    if (btnOpenAuth) {
+      btnOpenAuth.onclick = () => {
+        openModal('modalAuth');
+      };
+    }
+  }
+
+  setupAuthModalListeners();
+}
+
+function setupAuthModalListeners() {
+  const tabSignIn = document.getElementById('tabBtnSignIn');
+  const tabSignUp = document.getElementById('tabBtnSignUp');
+  const authModeInput = document.getElementById('authMode');
+  const groupFullName = document.getElementById('groupFullName');
+  const authSubmitText = document.getElementById('authSubmitText');
+  const authAlert = document.getElementById('authAlert');
+  const formAuth = document.getElementById('formAuth');
+
+  if (tabSignIn && tabSignUp && formAuth) {
+    tabSignIn.onclick = () => {
+      tabSignIn.classList.add('active');
+      tabSignUp.classList.remove('active');
+      authModeInput.value = 'signin';
+      if (groupFullName) groupFullName.style.display = 'none';
+      if (authSubmitText) authSubmitText.textContent = 'Sign In';
+      if (authAlert) authAlert.style.display = 'none';
+    };
+
+    tabSignUp.onclick = () => {
+      tabSignUp.classList.add('active');
+      tabSignIn.classList.remove('active');
+      authModeInput.value = 'signup';
+      if (groupFullName) groupFullName.style.display = 'block';
+      if (authSubmitText) authSubmitText.textContent = 'Create Account';
+      if (authAlert) authAlert.style.display = 'none';
+    };
+
+    formAuth.onsubmit = async (e) => {
+      e.preventDefault();
+      const mode = authModeInput.value;
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value;
+      const fullName = document.getElementById('authFullName') ? document.getElementById('authFullName').value.trim() : '';
+      const submitBtn = document.getElementById('btnAuthSubmit');
+
+      if (!email || !password) return;
+
+      submitBtn.classList.add('btn-loading');
+      submitBtn.disabled = true;
+      if (authAlert) authAlert.style.display = 'none';
+
+      try {
+        if (mode === 'signup') {
+          await SkillPathAuth.signUp(email, password, fullName);
+          submitBtn.classList.remove('btn-loading');
+          submitBtn.disabled = false;
+          closeModal('modalAuth');
+          showToast('Account registered! Safe cloud sync initiated.', 'success');
+          await SkillPathMigrate.migrateLocalDataToCloud();
+          setTimeout(() => window.location.reload(), 800);
+        } else {
+          await SkillPathAuth.signIn(email, password);
+          submitBtn.classList.remove('btn-loading');
+          submitBtn.disabled = false;
+          closeModal('modalAuth');
+          showToast('Welcome back! Cloud sync active.', 'success');
+          await SkillPathDB.syncWithCloud();
+          setTimeout(() => window.location.reload(), 800);
+        }
+      } catch (err) {
+        submitBtn.classList.remove('btn-loading');
+        submitBtn.disabled = false;
+        if (authAlert) {
+          authAlert.textContent = err.message || 'Authentication error';
+          authAlert.style.display = 'block';
+        }
+      }
+    };
+  }
+}
+
+/**
+ * Navigation Bar Initialization
  */
 function initNavigation() {
   const toggleBtn = document.getElementById('mobileMenuToggle');
@@ -864,7 +1097,7 @@ function initNavigation() {
     });
   }
 
-  // Backup & Restore buttons in Navigation if present
+  // Backup & Restore buttons
   const exportBtn = document.getElementById('btnExportData');
   if (exportBtn) {
     exportBtn.addEventListener('click', () => {
@@ -898,6 +1131,9 @@ function initNavigation() {
       e.target.value = '';
     });
   }
+
+  // Supabase Auth Integration in Navbar
+  initAuthNavbar();
 }
 
 /**
@@ -905,12 +1141,20 @@ function initNavigation() {
  * PAGE 1: DASHBOARD (index.html)
  * ============================================================================
  */
-function initDashboard() {
+async function initDashboard() {
   initNavigation();
   renderDashboardStats();
   renderDomainsGrid();
   setupAddDomainModal();
   setupQuickAddChips();
+
+  // Background Cloud Sync
+  SkillPathDB.syncWithCloud().then(hasUpdates => {
+    if (hasUpdates) {
+      renderDashboardStats();
+      renderDomainsGrid();
+    }
+  });
 }
 
 function renderDashboardStats() {
@@ -1022,7 +1266,6 @@ function setupAddDomainModal() {
   if (openBtn) openBtn.addEventListener('click', () => openModal('modalAddDomain'));
   if (emptyStateAddBtn) emptyStateAddBtn.addEventListener('click', () => openModal('modalAddDomain'));
 
-  // Color picker selection
   colorDots.forEach(dot => {
     dot.addEventListener('click', () => {
       colorDots.forEach(d => d.classList.remove('active'));
@@ -1057,7 +1300,6 @@ function setupAddDomainModal() {
     });
   }
 
-  // Edit Domain Form setup
   const formEdit = document.getElementById('formEditDomain');
   if (formEdit) {
     formEdit.addEventListener('submit', (e) => {
@@ -1124,10 +1366,9 @@ function setupQuickAddChips() {
  * PAGE 2: DOMAIN ROADMAP BUILDER (domain.html)
  * ============================================================================
  */
-function initDomainView() {
+async function initDomainView() {
   initNavigation();
 
-  // Get domain ID from URL query parameters
   const params = new URLSearchParams(window.location.search);
   const domainId = params.get('id');
 
@@ -1147,6 +1388,13 @@ function initDomainView() {
   renderDomainHeader(domain);
   renderStages(domain);
   setupRoadmapModals(domain);
+
+  // Background Cloud Sync
+  SkillPathDB.syncWithCloud().then(hasUpdates => {
+    if (hasUpdates) {
+      refreshDomainView(domainId);
+    }
+  });
 }
 
 function renderDomainHeader(domain) {
@@ -1177,7 +1425,6 @@ function renderDomainHeader(domain) {
     bannerGlow.style.background = domain.color;
   }
 
-  // Delete Domain Button
   const btnDelete = document.getElementById('btnDeleteThisDomain');
   if (btnDelete) {
     btnDelete.onclick = () => {
@@ -1189,7 +1436,6 @@ function renderDomainHeader(domain) {
     };
   }
 
-  // Edit Domain Button
   const btnEdit = document.getElementById('btnEditThisDomain');
   if (btnEdit) {
     btnEdit.onclick = () => {
@@ -1300,7 +1546,6 @@ function attachStageItemEvents(domain) {
   const container = document.getElementById('stagesWrapper');
   if (!container) return;
 
-  // Checkbox topic toggles
   container.querySelectorAll('.cb-topic').forEach(cb => {
     cb.addEventListener('change', () => {
       const stageId = cb.getAttribute('data-stage-id');
@@ -1310,7 +1555,6 @@ function attachStageItemEvents(domain) {
     });
   });
 
-  // Checkbox project toggles
   container.querySelectorAll('.cb-project').forEach(cb => {
     cb.addEventListener('change', () => {
       const stageId = cb.getAttribute('data-stage-id');
@@ -1320,7 +1564,6 @@ function attachStageItemEvents(domain) {
     });
   });
 
-  // Stage Move Up / Down
   container.querySelectorAll('.btn-move-stage-up').forEach(btn => {
     btn.addEventListener('click', () => {
       const stageId = btn.getAttribute('data-stage-id');
@@ -1337,7 +1580,6 @@ function attachStageItemEvents(domain) {
     });
   });
 
-  // Stage Delete
   container.querySelectorAll('.btn-delete-stage').forEach(btn => {
     btn.addEventListener('click', () => {
       const stageId = btn.getAttribute('data-stage-id');
@@ -1349,7 +1591,6 @@ function attachStageItemEvents(domain) {
     });
   });
 
-  // Stage Edit
   container.querySelectorAll('.btn-edit-stage').forEach(btn => {
     btn.addEventListener('click', () => {
       const stageId = btn.getAttribute('data-stage-id');
@@ -1364,7 +1605,6 @@ function attachStageItemEvents(domain) {
     });
   });
 
-  // Add Topic Button
   container.querySelectorAll('.btn-open-add-topic').forEach(btn => {
     btn.addEventListener('click', () => {
       const stageId = btn.getAttribute('data-stage-id');
@@ -1374,7 +1614,6 @@ function attachStageItemEvents(domain) {
     });
   });
 
-  // Add Project Button
   container.querySelectorAll('.btn-open-add-project').forEach(btn => {
     btn.addEventListener('click', () => {
       const stageId = btn.getAttribute('data-stage-id');
@@ -1384,7 +1623,6 @@ function attachStageItemEvents(domain) {
     });
   });
 
-  // Delete Topic
   container.querySelectorAll('.btn-delete-top').forEach(btn => {
     btn.addEventListener('click', () => {
       const stageId = btn.getAttribute('data-stage-id');
@@ -1394,7 +1632,6 @@ function attachStageItemEvents(domain) {
     });
   });
 
-  // Delete Project
   container.querySelectorAll('.btn-delete-prj').forEach(btn => {
     btn.addEventListener('click', () => {
       const stageId = btn.getAttribute('data-stage-id');
@@ -1404,7 +1641,6 @@ function attachStageItemEvents(domain) {
     });
   });
 
-  // Reorder Topics
   container.querySelectorAll('.btn-move-top-up').forEach(btn => {
     btn.addEventListener('click', () => {
       const stageId = btn.getAttribute('data-stage-id');
@@ -1433,7 +1669,6 @@ function refreshDomainView(domainId) {
 }
 
 function setupRoadmapModals(domain) {
-  // Add Stage Modal
   const btnOpenAddStage = document.getElementById('btnOpenAddStage');
   const btnEmptyAddStage = document.getElementById('btnEmptyAddStage');
   const formAddStage = document.getElementById('formAddStage');
@@ -1460,7 +1695,6 @@ function setupRoadmapModals(domain) {
     });
   }
 
-  // Edit Stage Form
   const formEditStage = document.getElementById('formEditStage');
   if (formEditStage) {
     formEditStage.addEventListener('submit', (e) => {
@@ -1476,7 +1710,6 @@ function setupRoadmapModals(domain) {
     });
   }
 
-  // Add Topic Form
   const formAddTopic = document.getElementById('formAddTopic');
   if (formAddTopic) {
     formAddTopic.addEventListener('submit', (e) => {
@@ -1497,7 +1730,6 @@ function setupRoadmapModals(domain) {
     });
   }
 
-  // Add Project Form
   const formAddProject = document.getElementById('formAddProject');
   if (formAddProject) {
     formAddProject.addEventListener('submit', (e) => {
@@ -1518,7 +1750,6 @@ function setupRoadmapModals(domain) {
     });
   }
 
-  // Edit Domain Form on domain.html
   const formEditDomain = document.getElementById('formEditDomain');
   if (formEditDomain) {
     formEditDomain.addEventListener('submit', (e) => {
@@ -1546,12 +1777,19 @@ function setupRoadmapModals(domain) {
  * PAGE 3: WEEKLY PLANNER & SKILLS MATRIX (planner.html)
  * ============================================================================
  */
-function initPlannerView() {
+async function initPlannerView() {
   initNavigation();
   renderWeeklyPlanner();
   renderSkillsTable();
   setupPlannerEvents();
   setupSkillsEvents();
+
+  // Background Cloud Sync
+  SkillPathDB.syncWithCloud().then(hasUpdates => {
+    if (hasUpdates) {
+      renderWeeklyPlanner();
+    }
+  });
 }
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -1591,7 +1829,6 @@ function renderWeeklyPlanner() {
     `;
   }).join('');
 
-  // Checkbox toggle
   container.querySelectorAll('.cb-plan-task').forEach(cb => {
     cb.addEventListener('change', () => {
       const day = cb.getAttribute('data-day');
@@ -1601,7 +1838,6 @@ function renderWeeklyPlanner() {
     });
   });
 
-  // Delete task
   container.querySelectorAll('.btn-del-plan-task').forEach(btn => {
     btn.addEventListener('click', () => {
       const day = btn.getAttribute('data-day');
@@ -1726,10 +1962,17 @@ function setupSkillsEvents() {
  * PAGE 4: RESOURCES DIRECTORY (resources.html)
  * ============================================================================
  */
-function initResourcesView() {
+async function initResourcesView() {
   initNavigation();
   renderResourcesGrid();
   setupResourcesEvents();
+
+  // Background Cloud Sync
+  SkillPathDB.syncWithCloud().then(hasUpdates => {
+    if (hasUpdates) {
+      renderResourcesGrid();
+    }
+  });
 }
 
 function renderResourcesGrid(searchTerm = '', filterDomain = 'ALL') {
@@ -1793,7 +2036,6 @@ function setupResourcesEvents() {
 
   if (btnOpen) {
     btnOpen.addEventListener('click', () => {
-      // Populate domain dropdown dynamically based on user's existing domains
       const domainSelect = document.getElementById('resDomain');
       if (domainSelect) {
         const domains = SkillPathDB.getDomains();
@@ -1834,7 +2076,6 @@ function setupResourcesEvents() {
   }
 
   if (domainFilter) {
-    // Populate domain filter options
     const domains = SkillPathDB.getDomains();
     domainFilter.innerHTML = `
       <option value="ALL">All Categories</option>
