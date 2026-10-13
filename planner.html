@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SkillPath - Weekly Study Planner & Skills Inventory</title>
+  <meta name="description" content="Plan your daily IT study schedule and log your technical proficiency matrix.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Sticky Navbar -->
+  <header class="navbar">
+    <div class="container nav-container">
+      <a href="index.html" class="brand" aria-label="SkillPath Home">
+        <div class="brand-icon">⚡</div>
+        <span>Skill<span class="brand-accent">Path</span></span>
+      </a>
+
+      <nav aria-label="Main Navigation">
+        <ul class="nav-links" id="navLinks">
+          <li class="nav-item"><a href="index.html">📊 Dashboard</a></li>
+          <li class="nav-item"><a href="planner.html" class="active">📅 Weekly Planner</a></li>
+          <li class="nav-item"><a href="resources.html">📚 Resources</a></li>
+        </ul>
+      </nav>
+
+      <div class="nav-actions">
+        <button id="btnExportData" class="btn btn-outline btn-sm">💾 Export</button>
+        <button id="btnImportData" class="btn btn-outline btn-sm">📥 Import</button>
+        <input type="file" id="importFileInput" accept=".json" style="display: none;" aria-hidden="true">
+        <a href="index.html" class="btn btn-primary btn-sm">My Roadmaps</a>
+        <button id="mobileMenuToggle" class="mobile-toggle" aria-label="Toggle Navigation Menu">☰</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="container">
+
+    <!-- Section 1: Weekly Study Planner -->
+    <section style="padding: 2.5rem 0 1rem;" aria-labelledby="plannerHeading">
+      <div class="section-header">
+        <div>
+          <h1 id="plannerHeading" style="font-size: 2.1rem; margin-bottom: 0.3rem;">Weekly Study Planner</h1>
+          <p>Organize your daily study sessions, revisions, and coding goals from Monday to Sunday.</p>
+        </div>
+        <button id="btnClearPlanner" class="btn btn-outline btn-sm">🔄 Reset Week</button>
+      </div>
+
+      <!-- 7-Day Grid -->
+      <div id="plannerGrid" class="planner-grid"></div>
+    </section>
+
+    <!-- Section 2: Technical Skills Matrix -->
+    <section style="padding: 1rem 0 3rem;" aria-labelledby="skillsHeading">
+      <div class="section-header">
+        <div>
+          <h2 id="skillsHeading" class="section-title">
+            <span>Technical Skills Matrix</span>
+          </h2>
+          <p>Track your competence across languages, libraries, protocols, and tools.</p>
+        </div>
+        <button id="btnOpenAddSkill" class="btn btn-primary btn-sm">+ Log New Skill</button>
+      </div>
+
+      <!-- Empty State for Skills -->
+      <div id="emptySkillsState" class="empty-state" style="display: none; padding: 2.5rem 1rem;">
+        <div class="empty-state-icon">💡</div>
+        <h3 class="empty-state-title">No skills logged yet</h3>
+        <p class="empty-state-desc">Start adding languages, tools, and frameworks with their proficiency levels.</p>
+        <button class="btn btn-secondary btn-sm" onclick="openModal('modalAddSkill')">+ Add Your First Skill</button>
+      </div>
+
+      <!-- Skills Table Card -->
+      <div class="table-card">
+        <div class="table-responsive">
+          <table class="skills-table">
+            <thead>
+              <tr>
+                <th scope="col">Skill / Technology</th>
+                <th scope="col">Category</th>
+                <th scope="col">Proficiency Level</th>
+                <th scope="col" style="text-align: right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="skillsTableBody">
+              <!-- Dynamically rendered -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal: Add Task for Day -->
+  <div id="modalAddPlanTask" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="addTaskDayHeading">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="addTaskDayHeading" class="modal-title">Add Study Goal for <span id="planTaskDayLabel">Monday</span></h3>
+        <button class="modal-close" onclick="closeModal('modalAddPlanTask')" aria-label="Close dialog">×</button>
+      </div>
+      <form id="formAddPlanTask">
+        <input type="hidden" id="planTaskDay">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="planTaskText" class="form-label">Study Task / Goal <span class="req">*</span></label>
+            <input type="text" id="planTaskText" class="form-control" placeholder="e.g. Solve 2 LeetCode problems + revise Docker networking" required>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modalAddPlanTask')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Goal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Skill -->
+  <div id="modalAddSkill" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="addSkillHeading">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="addSkillHeading" class="modal-title">Log Technical Skill</h3>
+        <button class="modal-close" onclick="closeModal('modalAddSkill')" aria-label="Close dialog">×</button>
+      </div>
+      <form id="formAddSkill">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="skillName" class="form-label">Skill / Tech Name <span class="req">*</span></label>
+            <input type="text" id="skillName" class="form-control" placeholder="e.g. TypeScript, PyTorch, Docker" required>
+          </div>
+
+          <div class="form-group">
+            <label for="skillCategory" class="form-label">Domain / Category</label>
+            <input type="text" id="skillCategory" class="form-control" placeholder="e.g. Frontend, DevOps, Machine Learning, Database" value="General">
+          </div>
+
+          <div class="form-group">
+            <label for="skillLevel" class="form-label">Proficiency Level</label>
+            <select id="skillLevel" class="form-control">
+              <option value="Beginner">Beginner (Learning syntax & concepts)</option>
+              <option value="Intermediate" selected>Intermediate (Building projects independently)</option>
+              <option value="Advanced">Advanced (Production-ready & optimization)</option>
+              <option value="Expert">Expert (Architecture & deep internals)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modalAddSkill')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add to Matrix</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <span>Skill<span class="brand-accent">Path</span></span>
+      </div>
+      <p class="footer-copy">SkillPath — Student Roadmap & IT Progress Tracker.</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      initPlannerView();
+    });
+  </script>
+</body>
+</html>

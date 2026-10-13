@@ -1,0 +1,24 @@
+{
+  "name": "road-map-web",
+  "version": "1.0.0",
+  "description": "**SkillPath** is a modern, responsive web application designed for IT and Computer Science students to build, organize, and track personalized learning roadmaps across any technology domain.",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pravinthpravinth040-cpu/Road-map.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/pravinthpravinth040-cpu/Road-map/issues"
+  },
+  "homepage": "https://github.com/pravinthpravinth040-cpu/Road-map#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.3"
+  }
+}

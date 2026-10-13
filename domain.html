@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SkillPath - Career Roadmap Builder</title>
+  <meta name="description" content="Build your stages, topics, and projects roadmap for this IT domain.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Sticky Navbar -->
+  <header class="navbar">
+    <div class="container nav-container">
+      <a href="index.html" class="brand" aria-label="SkillPath Home">
+        <div class="brand-icon">⚡</div>
+        <span>Skill<span class="brand-accent">Path</span></span>
+      </a>
+
+      <nav aria-label="Main Navigation">
+        <ul class="nav-links" id="navLinks">
+          <li class="nav-item"><a href="index.html">📊 Dashboard</a></li>
+          <li class="nav-item"><a href="planner.html">📅 Weekly Planner</a></li>
+          <li class="nav-item"><a href="resources.html">📚 Resources</a></li>
+        </ul>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="index.html" class="btn btn-outline btn-sm">← All Domains</a>
+        <button id="btnOpenAddStage" class="btn btn-primary btn-sm">+ Add Stage</button>
+        <button id="mobileMenuToggle" class="mobile-toggle" aria-label="Toggle Navigation Menu">☰</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="container">
+
+    <!-- Domain Hero Banner -->
+    <section class="domain-banner" id="domainHeroBanner">
+      <div class="domain-banner-glow" id="domainHeroGlow"></div>
+      <div class="domain-banner-header">
+        <div class="domain-banner-main">
+          <div class="domain-banner-icon" id="domainHeroIcon">🎯</div>
+          <div class="domain-banner-text">
+            <h1 id="domainHeroTitle">Loading Domain...</h1>
+            <p id="domainHeroDesc">Custom career learning path</p>
+          </div>
+        </div>
+
+        <div class="domain-banner-actions">
+          <button id="btnEditThisDomain" class="btn btn-secondary btn-sm">✏️ Edit Domain</button>
+          <button id="btnDeleteThisDomain" class="btn btn-danger btn-sm">🗑️ Delete Domain</button>
+        </div>
+      </div>
+
+      <!-- Domain Overall Progress -->
+      <div class="progress-container" style="margin-bottom: 0;">
+        <div class="progress-header">
+          <span class="progress-label" id="domainHeroWeeks">0 Estimated Weeks</span>
+          <span class="progress-percentage" id="domainHeroPercent">0/0 (0%)</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="domainHeroFill" style="width: 0%;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stages Section Header -->
+    <div class="section-header">
+      <h2 class="section-title">
+        <span>Roadmap Stages & Curricula</span>
+      </h2>
+      <button class="btn btn-secondary btn-sm" onclick="openModal('modalAddStage')">+ Add New Stage</button>
+    </div>
+
+    <!-- Empty State for Stages -->
+    <div id="emptyStages" class="empty-state" style="display: none;">
+      <div class="empty-state-icon">🪜</div>
+      <h3 class="empty-state-title">No stages added yet</h3>
+      <p class="empty-state-desc">Break this domain into phases like "Foundations", "Core Frameworks", and "Advanced Architecture".</p>
+      <button id="btnEmptyAddStage" class="btn btn-primary">+ Add First Stage</button>
+    </div>
+
+    <!-- Stages Accordion/Cards Container -->
+    <div id="stagesWrapper" class="stages-wrapper"></div>
+
+  </main>
+
+  <!-- Modal: Add Stage -->
+  <div id="modalAddStage" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="addStageTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="addStageTitle" class="modal-title">Add Roadmap Stage</h3>
+        <button class="modal-close" onclick="closeModal('modalAddStage')" aria-label="Close dialog">×</button>
+      </div>
+      <form id="formAddStage">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="stageTitle" class="form-label">Stage Title <span class="req">*</span></label>
+            <input type="text" id="stageTitle" class="form-control" placeholder="e.g. Stage 1: Computer Science Fundamentals" required>
+          </div>
+
+          <div class="form-group">
+            <label for="stageWeeks" class="form-label">Estimated Weeks</label>
+            <input type="number" id="stageWeeks" class="form-control" value="4" min="1" max="52">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modalAddStage')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Stage</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Stage -->
+  <div id="modalEditStage" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="editStageModalHeading">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="editStageModalHeading" class="modal-title">Edit Stage</h3>
+        <button class="modal-close" onclick="closeModal('modalEditStage')" aria-label="Close dialog">×</button>
+      </div>
+      <form id="formEditStage">
+        <input type="hidden" id="editStageId">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="editStageTitle" class="form-label">Stage Title <span class="req">*</span></label>
+            <input type="text" id="editStageTitle" class="form-control" required>
+          </div>
+
+          <div class="form-group">
+            <label for="editStageWeeks" class="form-label">Estimated Weeks</label>
+            <input type="number" id="editStageWeeks" class="form-control" min="1" max="52" required>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modalEditStage')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Topic -->
+  <div id="modalAddTopic" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="addTopicModalHeading">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="addTopicModalHeading" class="modal-title">Add Study Topic</h3>
+        <button class="modal-close" onclick="closeModal('modalAddTopic')" aria-label="Close dialog">×</button>
+      </div>
+      <form id="formAddTopic">
+        <input type="hidden" id="addTopicStageId">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="topicTitle" class="form-label">Topic Name <span class="req">*</span></label>
+            <input type="text" id="topicTitle" class="form-control" placeholder="e.g. Asynchronous JavaScript & Promises" required>
+          </div>
+
+          <div class="form-group">
+            <label for="topicLink" class="form-label">Resource / Documentation Link (Optional)</label>
+            <input type="url" id="topicLink" class="form-control" placeholder="https://developer.mozilla.org/...">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modalAddTopic')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Topic</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Mini Project -->
+  <div id="modalAddProject" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="addProjectModalHeading">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="addProjectModalHeading" class="modal-title">Add Mini Project</h3>
+        <button class="modal-close" onclick="closeModal('modalAddProject')" aria-label="Close dialog">×</button>
+      </div>
+      <form id="formAddProject">
+        <input type="hidden" id="addProjectStageId">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="projectTitle" class="form-label">Project Title <span class="req">*</span></label>
+            <input type="text" id="projectTitle" class="form-control" placeholder="e.g. Build an API rate limiter service" required>
+          </div>
+
+          <div class="form-group">
+            <label for="projectLink" class="form-label">Project Repo / Spec Link (Optional)</label>
+            <input type="url" id="projectLink" class="form-control" placeholder="https://github.com/...">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modalAddProject')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Project</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Domain -->
+  <div id="modalEditDomain" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="editDomainHeading">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="editDomainHeading" class="modal-title">Edit Domain Details</h3>
+        <button class="modal-close" onclick="closeModal('modalEditDomain')" aria-label="Close dialog">×</button>
+      </div>
+      <form id="formEditDomain">
+        <input type="hidden" id="editDomainId">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="editDomainName" class="form-label">Domain Name <span class="req">*</span></label>
+            <input type="text" id="editDomainName" class="form-control" required>
+          </div>
+
+          <div class="form-group">
+            <label for="editDomainDesc" class="form-label">Description</label>
+            <textarea id="editDomainDesc" class="form-control"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="editDomainIcon" class="form-label">Icon / Emoji</label>
+            <input type="text" id="editDomainIcon" class="form-control" maxlength="4">
+          </div>
+
+          <div class="form-group">
+            <label for="editDomainColor" class="form-label">Color Theme</label>
+            <input type="color" id="editDomainColor" class="form-control" style="height: 44px; padding: 4px;">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('modalEditDomain')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <span>Skill<span class="brand-accent">Path</span></span>
+      </div>
+      <p class="footer-copy">SkillPath — Student Roadmap & IT Progress Tracker.</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      initDomainView();
+    });
+  </script>
+</body>
+</html>
