@@ -304,59 +304,57 @@ const SkillPathDB = {
       const user = await SkillPathAuth.getUser();
       if (!user) return false;
 
-      // 1. Fetch domains
+      // 1. Fetch domains (RLS returns all global domains + user's personal domains)
       const { data: domainsData, error: domErr } = await client
         .from('domains')
         .select('*')
-        .eq('user_id', user.id)
         .order('created_at', { ascending: true });
 
       if (domErr) throw domErr;
 
-      // 2. Fetch stages
-      const { data: stagesData, error: stgErr } = await client
+      // 2. Fetch tasks under domains
+      const { data: tasksData } = await client
+        .from('tasks')
+        .select('*')
+        .order('position', { ascending: true });
+
+      // 3. Fetch user progress for current user
+      const { data: userProgressData } = await client
+        .from('user_progress')
+        .select('*')
+        .eq('user_id', user.id);
+
+      const completedTaskIds = new Set(
+        (userProgressData || []).filter(p => p.completed).map(p => p.task_id)
+      );
+
+      // 4. Fetch legacy stages/topics/projects if any exist
+      const { data: stagesData } = await client
         .from('stages')
         .select('*')
-        .eq('user_id', user.id)
         .order('position', { ascending: true });
 
-      if (stgErr) throw stgErr;
-
-      // 3. Fetch topics
-      const { data: topicsData, error: topErr } = await client
+      const { data: topicsData } = await client
         .from('topics')
         .select('*')
-        .eq('user_id', user.id)
         .order('position', { ascending: true });
 
-      if (topErr) throw topErr;
-
-      // 4. Fetch projects
-      const { data: projectsData, error: prjErr } = await client
+      const { data: projectsData } = await client
         .from('projects')
         .select('*')
-        .eq('user_id', user.id)
         .order('position', { ascending: true });
 
-      if (prjErr) throw prjErr;
-
       // 5. Fetch planner_tasks
-      const { data: plannerData, error: plnErr } = await client
+      const { data: plannerData } = await client
         .from('planner_tasks')
         .select('*')
-        .eq('user_id', user.id)
         .order('created_at', { ascending: true });
-
-      if (plnErr) throw plnErr;
 
       // 6. Fetch resources
-      const { data: resourcesData, error: resErr } = await client
+      const { data: resourcesData } = await client
         .from('resources')
         .select('*')
-        .eq('user_id', user.id)
         .order('created_at', { ascending: true });
-
-      if (resErr) throw resErr;
 
       // Assemble stages hierarchy with topics & projects
       const stagesByDomain = {};
@@ -367,7 +365,7 @@ const SkillPathDB = {
             id: t.id,
             title: t.title,
             link: t.link || '',
-            completed: !!t.completed
+            completed: completedTaskIds.has(t.id) || !!t.completed
           }));
 
         const stageProjects = (projectsData || [])
@@ -394,14 +392,41 @@ const SkillPathDB = {
       });
 
       // Assemble domains
-      const formattedDomains = (domainsData || []).map(dom => ({
-        id: dom.id,
-        name: dom.name,
-        description: dom.description || '',
-        icon: dom.icon || '🎯',
-        color: dom.color || '#6366f1',
-        stages: stagesByDomain[dom.id] || []
-      }));
+      const formattedDomains = (domainsData || []).map(dom => {
+        let domainStages = stagesByDomain[dom.id] || [];
+
+        // If no stages exist from stages table, build from tasks table!
+        const domainTasks = (tasksData || []).filter(t => t.domain_id === dom.id);
+        if (domainStages.length === 0 && domainTasks.length > 0) {
+          domainStages = [
+            {
+              id: `stg_${dom.id}`,
+              title: 'Curriculum Learning Milestones',
+              weeks: Math.max(1, Math.ceil(domainTasks.length / 2)),
+              topics: domainTasks.map(t => ({
+                id: t.id,
+                title: t.title,
+                description: t.description || '',
+                link: t.resource_url || '',
+                completed: completedTaskIds.has(t.id)
+              })),
+              projects: []
+            }
+          ];
+        }
+
+        return {
+          id: dom.id,
+          name: dom.title || dom.name || 'Untitled Roadmap',
+          title: dom.title || dom.name || 'Untitled Roadmap',
+          description: dom.description || '',
+          icon: dom.icon || '🎯',
+          color: dom.color || (dom.is_global ? '#6366f1' : '#06b6d4'),
+          is_global: !!dom.is_global,
+          created_by: dom.created_by || dom.user_id,
+          stages: domainStages
+        };
+      });
 
       // Assemble planner
       const formattedPlanner = {
@@ -626,11 +651,11 @@ const SkillPathDB = {
         if (user) {
           client.from('domains').insert({
             id: domainId,
-            user_id: user.id,
-            name: newDomain.name,
+            created_by: user.id,
+            title: newDomain.name,
             description: newDomain.description,
             icon: newDomain.icon,
-            color: newDomain.color
+            is_global: false
           }).then(({ error }) => {
             if (error) console.error('Supabase domain insert error:', error);
           });
@@ -681,6 +706,7 @@ const SkillPathDB = {
       description: template.description,
       icon: template.icon,
       color: template.color,
+      is_global: false,
       stages: newStages
     };
 
@@ -695,11 +721,11 @@ const SkillPathDB = {
         try {
           await client.from('domains').insert({
             id: domainId,
-            user_id: user.id,
-            name: newDomain.name,
+            created_by: user.id,
+            title: newDomain.name,
             description: newDomain.description,
             icon: newDomain.icon,
-            color: newDomain.color
+            is_global: false
           });
 
           for (let sIdx = 0; sIdx < newStages.length; sIdx++) {
@@ -1004,14 +1030,27 @@ const SkillPathDB = {
     topic.completed = !topic.completed;
     this.saveData(data);
 
-    // Persist to Supabase
+    // Persist to user_progress & topics in Supabase
     const client = window.supabaseClient;
-    if (client) {
+    if (client && typeof SkillPathAuth !== 'undefined') {
+      SkillPathAuth.getUser().then(user => {
+        if (user) {
+          client.from('user_progress').upsert({
+            user_id: user.id,
+            task_id: topicId,
+            completed: topic.completed,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id,task_id' }).then(({ error }) => {
+            if (error) console.warn('Supabase user_progress toggle error:', error);
+          });
+        }
+      });
+
       client.from('topics').update({
         completed: topic.completed,
         completed_at: topic.completed ? new Date().toISOString() : null
       }).eq('id', topicId).then(({ error }) => {
-        if (error) console.error('Supabase topic toggle error:', error);
+        // topics table might not contain global tasks, which is expected
       });
     }
 
@@ -1582,6 +1621,12 @@ async function initDashboard() {
   }
 
   initNavigation();
+
+  // Determine admin status
+  if (typeof SkillPathAuth !== 'undefined') {
+    window._currentUserIsAdmin = await SkillPathAuth.isAdmin();
+  }
+
   renderDashboardStats();
   renderDomainsGrid();
   setupAddDomainModal();
@@ -1612,6 +1657,7 @@ function renderDomainsGrid() {
   if (!domainsContainer) return;
 
   const domains = SkillPathDB.getDomains();
+  const isAdmin = !!window._currentUserIsAdmin;
 
   if (domains.length === 0) {
     domainsContainer.innerHTML = '';
@@ -1624,6 +1670,7 @@ function renderDomainsGrid() {
   domainsContainer.innerHTML = domains.map(domain => {
     const progress = SkillPathDB.calculateDomainProgress(domain);
     const stageCount = domain.stages ? domain.stages.length : 0;
+    const canManage = !domain.is_global || isAdmin;
 
     return `
       <article class="domain-card" data-id="${domain.id}">
@@ -1636,10 +1683,17 @@ function renderDomainsGrid() {
               </div>
               <div>
                 <h3 class="domain-card-title">${escapeHTML(domain.name)}</h3>
-                <span class="stage-duration">${progress.totalWeeks} Estimated Weeks</span>
+                <div style="display: flex; align-items: center; gap: 0.4rem; margin-top: 0.25rem; flex-wrap: wrap;">
+                  <span class="stage-duration">${progress.totalWeeks} Estimated Weeks</span>
+                  ${domain.is_global 
+                    ? '<span class="roadmap-badge badge-global">🌐 Global Roadmap</span>' 
+                    : '<span class="roadmap-badge badge-personal">👤 Personal Roadmap</span>'}
+                </div>
               </div>
             </div>
-            <button class="btn btn-icon btn-outline btn-delete-domain" title="Delete Domain" data-id="${domain.id}">🗑️</button>
+            ${canManage ? `
+              <button class="btn btn-icon btn-outline btn-delete-domain" title="Delete Domain" data-id="${domain.id}">🗑️</button>
+            ` : ''}
           </div>
           
           <p class="domain-card-desc">${escapeHTML(domain.description)}</p>
@@ -1661,7 +1715,9 @@ function renderDomainsGrid() {
         </div>
 
         <div class="domain-card-footer">
-          <button class="btn btn-outline btn-sm btn-edit-domain" data-id="${domain.id}">✏️ Edit Details</button>
+          ${canManage ? `
+            <button class="btn btn-outline btn-sm btn-edit-domain" data-id="${domain.id}">✏️ Edit Details</button>
+          ` : ''}
           <a href="domain.html?id=${encodeURIComponent(domain.id)}" class="btn btn-primary btn-sm">Explore Roadmap →</a>
         </div>
       </article>
@@ -1806,6 +1862,7 @@ async function initDomainView() {
   if (typeof SkillPathAuth !== 'undefined') {
     const user = await SkillPathAuth.requireAuth();
     if (!user) return;
+    window._currentUserIsAdmin = await SkillPathAuth.isAdmin();
   }
 
   initNavigation();
@@ -1836,6 +1893,8 @@ async function initDomainView() {
 
 function renderDomainHeader(domain) {
   const progress = SkillPathDB.calculateDomainProgress(domain);
+  const isAdmin = !!window._currentUserIsAdmin;
+  const canManage = !domain.is_global || isAdmin;
 
   const bannerIcon = document.getElementById('domainHeroIcon');
   const bannerTitle = document.getElementById('domainHeroTitle');
@@ -1851,7 +1910,12 @@ function renderDomainHeader(domain) {
     bannerIcon.style.border = `1px solid ${domain.color}60`;
   }
   if (bannerTitle) bannerTitle.textContent = domain.name;
-  if (bannerDesc) bannerDesc.textContent = domain.description;
+  if (bannerDesc) {
+    const badgeHtml = domain.is_global
+      ? '<span class="roadmap-badge badge-global" style="margin-left: 0.5rem;">🌐 Official Curriculum</span>'
+      : '<span class="roadmap-badge badge-personal" style="margin-left: 0.5rem;">👤 Personal Roadmap</span>';
+    bannerDesc.innerHTML = `${escapeHTML(domain.description || 'Learning Roadmap')} ${badgeHtml}`;
+  }
   if (bannerWeeks) bannerWeeks.textContent = `${progress.totalWeeks} Estimated Weeks`;
   if (bannerPercent) bannerPercent.textContent = `${progress.completed}/${progress.total} Items (${progress.percentage}%)`;
   if (bannerFill) {
@@ -1862,8 +1926,10 @@ function renderDomainHeader(domain) {
     bannerGlow.style.background = domain.color;
   }
 
+  // Manage buttons visibility
   const btnDelete = document.getElementById('btnDeleteThisDomain');
   if (btnDelete) {
+    btnDelete.style.display = canManage ? 'inline-flex' : 'none';
     btnDelete.onclick = () => {
       if (confirm(`Are you sure you want to delete the roadmap for "${domain.name}"?`)) {
         SkillPathDB.deleteDomain(domain.id);
@@ -1875,6 +1941,7 @@ function renderDomainHeader(domain) {
 
   const btnEdit = document.getElementById('btnEditThisDomain');
   if (btnEdit) {
+    btnEdit.style.display = canManage ? 'inline-flex' : 'none';
     btnEdit.onclick = () => {
       document.getElementById('editDomainId').value = domain.id;
       document.getElementById('editDomainName').value = domain.name;
@@ -1884,6 +1951,13 @@ function renderDomainHeader(domain) {
       openModal('modalEditDomain');
     };
   }
+
+  // If global domain and not admin, hide add stage buttons
+  const btnOpenAddStage = document.getElementById('btnOpenAddStage');
+  if (btnOpenAddStage) btnOpenAddStage.style.display = canManage ? 'inline-flex' : 'none';
+
+  const sectionAddBtn = document.querySelector('.section-header button');
+  if (sectionAddBtn) sectionAddBtn.style.display = canManage ? 'inline-flex' : 'none';
 }
 
 function renderStages(domain) {
@@ -1892,6 +1966,8 @@ function renderStages(domain) {
   if (!stagesWrapper) return;
 
   const stages = domain.stages || [];
+  const isAdmin = !!window._currentUserIsAdmin;
+  const canManage = !domain.is_global || isAdmin;
 
   if (stages.length === 0) {
     stagesWrapper.innerHTML = '';
@@ -1914,12 +1990,14 @@ function renderStages(domain) {
             <span class="stage-duration">⏳ ${stage.weeks} ${stage.weeks === 1 ? 'Week' : 'Weeks'}</span>
             <span class="section-badge">${stageProg.completed}/${stageProg.total} Done (${stageProg.percentage}%)</span>
           </div>
-          <div class="stage-controls">
-            <button class="btn btn-icon btn-outline btn-sm btn-move-stage-up" title="Move Up" data-stage-id="${stage.id}" ${idx === 0 ? 'disabled' : ''}>↑</button>
-            <button class="btn btn-icon btn-outline btn-sm btn-move-stage-down" title="Move Down" data-stage-id="${stage.id}" ${idx === stages.length - 1 ? 'disabled' : ''}>↓</button>
-            <button class="btn btn-icon btn-outline btn-sm btn-edit-stage" title="Edit Stage" data-stage-id="${stage.id}">✏️</button>
-            <button class="btn btn-icon btn-danger btn-sm btn-delete-stage" title="Delete Stage" data-stage-id="${stage.id}">🗑️</button>
-          </div>
+          ${canManage ? `
+            <div class="stage-controls">
+              <button class="btn btn-icon btn-outline btn-sm btn-move-stage-up" title="Move Up" data-stage-id="${stage.id}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+              <button class="btn btn-icon btn-outline btn-sm btn-move-stage-down" title="Move Down" data-stage-id="${stage.id}" ${idx === stages.length - 1 ? 'disabled' : ''}>↓</button>
+              <button class="btn btn-icon btn-outline btn-sm btn-edit-stage" title="Edit Stage" data-stage-id="${stage.id}">✏️</button>
+              <button class="btn btn-icon btn-danger btn-sm btn-delete-stage" title="Delete Stage" data-stage-id="${stage.id}">🗑️</button>
+            </div>
+          ` : ''}
         </div>
 
         <div class="progress-track" style="border-radius: 0; height: 4px;">
@@ -1941,11 +2019,13 @@ function renderStages(domain) {
                   <span class="item-text">${escapeHTML(t.title)}</span>
                   ${t.link ? `<a href="${escapeHTML(t.link)}" target="_blank" rel="noopener noreferrer" class="item-link-btn" title="Open Resource">🔗 Docs</a>` : ''}
                 </div>
-                <div class="item-actions">
-                  <button class="btn btn-icon btn-outline btn-sm btn-move-top-up" data-stage-id="${stage.id}" data-topic-id="${t.id}" ${tIdx === 0 ? 'disabled' : ''}>↑</button>
-                  <button class="btn btn-icon btn-outline btn-sm btn-move-top-down" data-stage-id="${stage.id}" data-topic-id="${t.id}" ${tIdx === topics.length - 1 ? 'disabled' : ''}>↓</button>
-                  <button class="btn btn-icon btn-danger btn-sm btn-delete-top" data-stage-id="${stage.id}" data-topic-id="${t.id}">×</button>
-                </div>
+                ${canManage ? `
+                  <div class="item-actions">
+                    <button class="btn btn-icon btn-outline btn-sm btn-move-top-up" data-stage-id="${stage.id}" data-topic-id="${t.id}" ${tIdx === 0 ? 'disabled' : ''}>↑</button>
+                    <button class="btn btn-icon btn-outline btn-sm btn-move-top-down" data-stage-id="${stage.id}" data-topic-id="${t.id}" ${tIdx === topics.length - 1 ? 'disabled' : ''}>↓</button>
+                    <button class="btn btn-icon btn-danger btn-sm btn-delete-top" data-stage-id="${stage.id}" data-topic-id="${t.id}">×</button>
+                  </div>
+                ` : ''}
               </div>
             `).join('')}
 
@@ -1958,19 +2038,23 @@ function renderStages(domain) {
                   <span class="item-text">${escapeHTML(p.title)}</span>
                   ${p.link ? `<a href="${escapeHTML(p.link)}" target="_blank" rel="noopener noreferrer" class="item-link-btn" title="View Project Specs">📁 Spec</a>` : ''}
                 </div>
-                <div class="item-actions">
-                  <button class="btn btn-icon btn-outline btn-sm btn-move-prj-up" data-stage-id="${stage.id}" data-project-id="${p.id}" ${pIdx === 0 ? 'disabled' : ''}>↑</button>
-                  <button class="btn btn-icon btn-outline btn-sm btn-move-prj-down" data-stage-id="${stage.id}" data-project-id="${p.id}" ${pIdx === projects.length - 1 ? 'disabled' : ''}>↓</button>
-                  <button class="btn btn-icon btn-danger btn-sm btn-delete-prj" data-stage-id="${stage.id}" data-project-id="${p.id}">×</button>
-                </div>
+                ${canManage ? `
+                  <div class="item-actions">
+                    <button class="btn btn-icon btn-outline btn-sm btn-move-prj-up" data-stage-id="${stage.id}" data-project-id="${p.id}" ${pIdx === 0 ? 'disabled' : ''}>↑</button>
+                    <button class="btn btn-icon btn-outline btn-sm btn-move-prj-down" data-stage-id="${stage.id}" data-project-id="${p.id}" ${pIdx === projects.length - 1 ? 'disabled' : ''}>↓</button>
+                    <button class="btn btn-icon btn-danger btn-sm btn-delete-prj" data-stage-id="${stage.id}" data-project-id="${p.id}">×</button>
+                  </div>
+                ` : ''}
               </div>
             `).join('')}
           </div>
 
-          <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem;">
-            <button class="btn btn-secondary btn-sm btn-open-add-topic" data-stage-id="${stage.id}">+ Add Topic</button>
-            <button class="btn btn-outline btn-sm btn-open-add-project" data-stage-id="${stage.id}">+ Add Mini Project</button>
-          </div>
+          ${canManage ? `
+            <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem;">
+              <button class="btn btn-secondary btn-sm btn-open-add-topic" data-stage-id="${stage.id}">+ Add Topic</button>
+              <button class="btn btn-outline btn-sm btn-open-add-project" data-stage-id="${stage.id}">+ Add Mini Project</button>
+            </div>
+          ` : ''}
         </div>
       </section>
     `;

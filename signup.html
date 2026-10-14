@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up - SkillPath: IT Career Roadmap Tracker</title>
+  <meta name="description" content="Create your SkillPath account to start building and tracking custom IT career roadmaps.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Supabase CDN (Pinned Version) & Config -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+</head>
+<body class="auth-page-body">
+
+  <!-- Minimal Brand Header -->
+  <header class="auth-navbar">
+    <div class="container auth-nav-container">
+      <a href="index.html" class="brand" aria-label="SkillPath Home">
+        <div class="brand-icon">⚡</div>
+        <span>Skill<span class="brand-accent">Path</span></span>
+      </a>
+      <a href="signin.html" class="btn btn-outline btn-sm">Sign In</a>
+    </div>
+  </header>
+
+  <!-- Auth Main Container -->
+  <main class="auth-container">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-badge-icon">🚀</div>
+        <h1 class="auth-title">Create Account</h1>
+        <div class="auth-brand-headline">SkillPath: IT Career Roadmap Tracker</div>
+        <p class="auth-brand-tagline">Design personalized tech roadmaps, follow curated curriculum paths, and master skills step by step.</p>
+      </div>
+
+      <!-- Alert Box -->
+      <div id="authAlert" class="auth-alert" role="alert" style="display: none;"></div>
+
+      <form id="formSignup" novalidate>
+        <!-- Full Name -->
+        <div class="form-group">
+          <label for="fullName" class="form-label">Full Name <span class="req">*</span></label>
+          <input
+            type="text"
+            id="fullName"
+            class="form-control"
+            placeholder="Alex Morgan"
+            required
+            autocomplete="name"
+          >
+          <div class="field-error" id="fullNameError"></div>
+        </div>
+
+        <!-- Email -->
+        <div class="form-group">
+          <label for="email" class="form-label">Email Address <span class="req">*</span></label>
+          <input
+            type="email"
+            id="email"
+            class="form-control"
+            placeholder="student@example.com"
+            required
+            autocomplete="email"
+          >
+          <div class="field-error" id="emailError"></div>
+        </div>
+
+        <!-- Password -->
+        <div class="form-group">
+          <label for="password" class="form-label">Password <span class="req">*</span></label>
+          <div class="password-input-wrapper">
+            <input
+              type="password"
+              id="password"
+              class="form-control"
+              placeholder="Minimum 8 chars, 1 letter & 1 number"
+              required
+              autocomplete="new-password"
+            >
+            <button type="button" id="togglePassword" class="password-toggle-btn" aria-label="Show password">👁️</button>
+          </div>
+          <div class="field-error" id="passwordError"></div>
+        </div>
+
+        <!-- Confirm Password -->
+        <div class="form-group">
+          <label for="confirmPassword" class="form-label">Confirm Password <span class="req">*</span></label>
+          <div class="password-input-wrapper">
+            <input
+              type="password"
+              id="confirmPassword"
+              class="form-control"
+              placeholder="Re-enter your password"
+              required
+              autocomplete="new-password"
+            >
+            <button type="button" id="toggleConfirmPassword" class="password-toggle-btn" aria-label="Show password">👁️</button>
+          </div>
+          <div class="field-error" id="confirmPasswordError"></div>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" id="btnSubmitSignup" class="btn btn-primary auth-submit-btn">
+          <span id="submitBtnText">Create Account</span>
+        </button>
+      </form>
+
+      <div class="auth-card-footer">
+        <p>Already have an account? <a href="signin.html" class="auth-link">Sign In</a></p>
+      </div>
+
+      <div class="auth-privacy-footer">
+        By registering, you agree to our <a href="privacy.html">Privacy Policy</a>. Personal roadmaps are private to your account.
+      </div>
+    </div>
+  </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Redirect if already authenticated
+      await SkillPathAuth.redirectIfAuthenticated();
+
+      // Show/Hide Password toggles
+      SkillPathAuth.initPasswordToggle('togglePassword', 'password');
+      SkillPathAuth.initPasswordToggle('toggleConfirmPassword', 'confirmPassword');
+
+      const form = document.getElementById('formSignup');
+      const submitBtn = document.getElementById('btnSubmitSignup');
+      const submitBtnText = document.getElementById('submitBtnText');
+      const alertBox = document.getElementById('authAlert');
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearErrors();
+
+        const fullName = document.getElementById('fullName').value.trim();
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+
+        // Validation Rules
+        let hasError = false;
+
+        if (!fullName) {
+          showFieldError('fullNameError', 'Please enter your full name.');
+          hasError = true;
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email) {
+          showFieldError('emailError', 'Please enter your email address.');
+          hasError = true;
+        } else if (!emailRegex.test(email)) {
+          showFieldError('emailError', 'Please enter a valid email address.');
+          hasError = true;
+        }
+
+        // Password: at least 8 chars, with at least 1 letter and 1 number
+        const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+        if (!password) {
+          showFieldError('passwordError', 'Please create a password.');
+          hasError = true;
+        } else if (password.length < 8) {
+          showFieldError('passwordError', 'Password must be at least 8 characters.');
+          hasError = true;
+        } else if (!passwordRegex.test(password)) {
+          showFieldError('passwordError', 'Password must include at least one letter and one number.');
+          hasError = true;
+        }
+
+        if (!confirmPassword) {
+          showFieldError('confirmPasswordError', 'Please confirm your password.');
+          hasError = true;
+        } else if (password !== confirmPassword) {
+          showFieldError('confirmPasswordError', 'Passwords do not match.');
+          hasError = true;
+        }
+
+        if (hasError) return;
+
+        setLoading(true);
+
+        try {
+          const res = await SkillPathAuth.signUp(email, password, fullName);
+          setLoading(false);
+
+          if (res.session) {
+            // Instant session created
+            showAlert('success', '🎉 Account created successfully! Redirecting to your dashboard...');
+            setTimeout(() => {
+              window.location.href = 'index.html';
+            }, 1000);
+          } else {
+            // Confirmation email sent or awaiting confirmation
+            showAlert(
+              'success',
+              '🎉 Account created! If email confirmation is enabled on your project, please check your inbox to confirm your address, then <a href="signin.html" style="text-decoration:underline; font-weight:bold;">Sign In</a>.'
+            );
+            form.reset();
+          }
+        } catch (err) {
+          setLoading(false);
+          let message = err.message || 'Unable to create account. Please try again.';
+          if (message.includes('User already registered')) {
+            message = 'An account with this email already exists. <a href="signin.html" class="auth-link">Sign in instead</a>.';
+          }
+          showAlert('error', message);
+        }
+      });
+
+      function clearErrors() {
+        document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+        alertBox.style.display = 'none';
+        alertBox.className = 'auth-alert';
+        alertBox.textContent = '';
+      }
+
+      function showFieldError(elementId, message) {
+        const el = document.getElementById(elementId);
+        if (el) el.textContent = message;
+      }
+
+      function showAlert(type, message) {
+        alertBox.className = `auth-alert alert-${type}`;
+        alertBox.innerHTML = message;
+        alertBox.style.display = 'block';
+      }
+
+      function setLoading(isLoading) {
+        submitBtn.disabled = isLoading;
+        if (isLoading) {
+          submitBtn.classList.add('btn-loading');
+          submitBtnText.textContent = 'Creating Account...';
+        } else {
+          submitBtn.classList.remove('btn-loading');
+          submitBtnText.textContent = 'Create Account';
+        }
+      }
+    });
+  </script>
+</body>
+</html>

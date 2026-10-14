@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - SkillPath: IT Career Roadmap Tracker</title>
+  <meta name="description" content="SkillPath privacy policy detailing how your user data, roadmaps, and progress are securely stored and protected.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Supabase CDN (Pinned Version) & Config -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+</head>
+<body>
+
+  <!-- Sticky Navbar -->
+  <header class="navbar">
+    <div class="container nav-container">
+      <a href="index.html" class="brand" aria-label="SkillPath Home">
+        <div class="brand-icon">⚡</div>
+        <span>Skill<span class="brand-accent">Path</span></span>
+      </a>
+
+      <nav aria-label="Main Navigation">
+        <ul class="nav-links" id="navLinks">
+          <li class="nav-item"><a href="index.html">📊 Dashboard</a></li>
+          <li class="nav-item"><a href="planner.html">📅 Weekly Planner</a></li>
+          <li class="nav-item"><a href="resources.html">📚 Resources</a></li>
+        </ul>
+      </nav>
+
+      <div class="nav-actions">
+        <div id="navAuthContainer"></div>
+        <a href="index.html" class="btn btn-outline btn-sm">← Back to Dashboard</a>
+        <button id="mobileMenuToggle" class="mobile-toggle" aria-label="Toggle Navigation Menu">☰</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container" style="max-width: 860px; padding-top: 3rem; padding-bottom: 5rem;">
+
+    <div class="section-header" style="margin-bottom: 2rem;">
+      <div>
+        <h1 style="font-size: 2.25rem; font-weight: 800; margin-bottom: 0.5rem;">🔒 Privacy Policy</h1>
+        <p class="hero-subtitle">SkillPath: IT Career Roadmap Tracker is committed to transparent data handling and user privacy.</p>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 2.25rem; margin-bottom: 2rem; background: var(--bg-surface); border: 1px solid var(--border-card); border-radius: var(--radius-xl);">
+      <h2 style="font-size: 1.35rem; color: #818cf8; margin-bottom: 1rem;">1. Information We Collect</h2>
+      <p style="color: var(--text-muted); margin-bottom: 1.25rem;">
+        When you create an account and interact with SkillPath, we store the minimum necessary data to provide personalized learning roadmap and progress tracking services:
+      </p>
+      
+      <ul style="color: var(--text-main); line-height: 1.8; margin-left: 1.5rem; margin-bottom: 1.5rem;">
+        <li><strong>Full Name & Email Address:</strong> Used for account identity, login credentials, password resets, and session authorization via Supabase Auth.</li>
+        <li><strong>Account Role:</strong> Assigned as either <code>user</code> (default student) or <code>admin</code> (curriculum administrator), governing platform permissions.</li>
+        <li><strong>Roadmap Task Progress:</strong> Which specific learning tasks you mark as completed, including timestamps in <code>public.user_progress</code>.</li>
+        <li><strong>Personal Roadmaps & Tasks:</strong> Any custom domains, milestones, and tasks you manually create under your account (<code>is_global = false</code>).</li>
+        <li><strong>Weekly Study Planner & Resources:</strong> Any tasks entered into your weekly study planner or saved bookmarks in your resources directory.</li>
+      </ul>
+
+      <h2 style="font-size: 1.35rem; color: #22d3ee; margin-top: 2rem; margin-bottom: 1rem;">2. How Your Data Is Secured (Row Level Security)</h2>
+      <p style="color: var(--text-muted); margin-bottom: 1rem;">
+        We enforce strict PostgreSQL <strong>Row Level Security (RLS)</strong> directly on database tables:
+      </p>
+      <ul style="color: var(--text-main); line-height: 1.8; margin-left: 1.5rem; margin-bottom: 1.5rem;">
+        <li>Your personal domains and custom tasks are private to your user ID and cannot be viewed, altered, or deleted by other users.</li>
+        <li>Your completion checkmarks are linked directly to your authenticated session.</li>
+        <li>Database security triggers block non-admin accounts from modifying their own roles.</li>
+        <li>Passwords are cryptographically hashed and never stored or visible in plain text.</li>
+      </ul>
+
+      <h2 style="font-size: 1.35rem; color: #34d399; margin-top: 2rem; margin-bottom: 1rem;">3. Global Roadmaps vs. Personal Roadmaps</h2>
+      <p style="color: var(--text-muted); margin-bottom: 1rem;">
+        SkillPath features two types of roadmaps:
+      </p>
+      <ul style="color: var(--text-main); line-height: 1.8; margin-left: 1.5rem; margin-bottom: 1.5rem;">
+        <li><strong>Global Roadmaps:</strong> Curated career tracks published by SkillPath administrators (e.g. AI Engineering, Full Stack Development). All authenticated users can view these roadmaps and track their individual progress.</li>
+        <li><strong>Personal Roadmaps:</strong> Custom career paths you create yourself. Only you can view, edit, or delete your personal domains and tasks.</li>
+      </ul>
+
+      <h2 style="font-size: 1.35rem; color: #fbbf24; margin-top: 2rem; margin-bottom: 1rem;">4. Third-Party Services</h2>
+      <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
+        SkillPath runs as a static client hosted on GitHub Pages or Vercel, utilizing <strong>Supabase</strong> for authentication, database storage, and Row Level Security. We do not sell, rent, or share your personal data with third-party advertisers.
+      </p>
+
+      <h2 style="font-size: 1.35rem; color: #f43f5e; margin-top: 2rem; margin-bottom: 1rem;">5. Contact & Data Deletion</h2>
+      <p style="color: var(--text-muted);">
+        If you wish to export your roadmap data, use the <strong>💾 Export</strong> feature in the dashboard navigation. To request account or data removal, please contact the repository administrator.
+      </p>
+    </div>
+
+    <div style="text-align: center; color: var(--text-dim); font-size: 0.85rem;">
+      <p>© 2026 SkillPath: IT Career Roadmap Tracker. All rights reserved.</p>
+      <p style="margin-top: 0.5rem;"><a href="index.html">Dashboard</a> · <a href="signin.html">Sign In</a> · <a href="signup.html">Sign Up</a> · <a href="admin-login.html">Admin Portal</a></p>
+    </div>
+
+  </main>
+
+  <script>
+    // Mobile navigation toggle
+    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+    const navLinks = document.getElementById('navLinks');
+    if (mobileMenuToggle && navLinks) {
+      mobileMenuToggle.addEventListener('click', () => {
+        navLinks.classList.toggle('open');
+      });
+    }
+  </script>
+</body>
+</html>

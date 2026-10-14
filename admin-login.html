@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Portal - SkillPath: IT Career Roadmap Tracker</title>
+  <meta name="description" content="Administrator sign in for SkillPath curriculum and domain management.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Supabase CDN (Pinned Version) & Config -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+</head>
+<body class="auth-page-body">
+
+  <!-- Minimal Brand Header -->
+  <header class="auth-navbar">
+    <div class="container auth-nav-container">
+      <a href="index.html" class="brand" aria-label="SkillPath Home">
+        <div class="brand-icon">⚡</div>
+        <span>Skill<span class="brand-accent">Path</span></span>
+      </a>
+      <a href="signin.html" class="btn btn-outline btn-sm">Student Sign In</a>
+    </div>
+  </header>
+
+  <!-- Auth Main Container -->
+  <main class="auth-container">
+    <div class="auth-card" style="border-top: 3px solid #6366f1;">
+      <div class="auth-header">
+        <div class="auth-badge-icon" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc;">🛡️</div>
+        <h1 class="auth-title">Admin Sign In</h1>
+        <div class="auth-brand-headline">SkillPath: IT Career Roadmap Tracker</div>
+        <p class="auth-brand-tagline">Administrator portal for managing global roadmaps, milestone tasks, and monitoring student completion metrics.</p>
+      </div>
+
+      <!-- Alert Box -->
+      <div id="authAlert" class="auth-alert" role="alert" style="display: none;"></div>
+
+      <form id="formAdminLogin" novalidate>
+        <!-- Email -->
+        <div class="form-group">
+          <label for="adminEmail" class="form-label">Administrator Email <span class="req">*</span></label>
+          <input
+            type="email"
+            id="adminEmail"
+            class="form-control"
+            placeholder="admin@example.com"
+            required
+            autocomplete="email"
+          >
+          <div class="field-error" id="emailError"></div>
+        </div>
+
+        <!-- Password -->
+        <div class="form-group">
+          <div class="label-with-link">
+            <label for="adminPassword" class="form-label" style="margin-bottom: 0;">Password <span class="req">*</span></label>
+            <a href="forgot-password.html" class="auth-sublink">Forgot password?</a>
+          </div>
+          <div class="password-input-wrapper">
+            <input
+              type="password"
+              id="adminPassword"
+              class="form-control"
+              placeholder="Enter administrator password"
+              required
+              autocomplete="current-password"
+            >
+            <button type="button" id="toggleAdminPassword" class="password-toggle-btn" aria-label="Show password">👁️</button>
+          </div>
+          <div class="field-error" id="passwordError"></div>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" id="btnSubmitAdminLogin" class="btn btn-primary auth-submit-btn" style="background: linear-gradient(135deg, #6366f1, #4f46e5);">
+          <span id="submitBtnText">Sign In to Admin Dashboard</span>
+        </button>
+      </form>
+
+      <div class="auth-card-footer">
+        <p>Not an administrator? <a href="signin.html" class="auth-link">Student Sign In</a></p>
+      </div>
+
+      <div class="auth-privacy-footer">
+        Administrator sessions are strictly audited. Review our <a href="privacy.html">Privacy Policy</a>.
+      </div>
+    </div>
+  </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Check if user is already logged in as admin
+      const session = await SkillPathAuth.getSession();
+      if (session) {
+        const isAdmin = await SkillPathAuth.isAdmin();
+        if (isAdmin) {
+          window.location.href = 'admin.html';
+          return;
+        }
+      }
+
+      // Show/Hide Password toggle
+      SkillPathAuth.initPasswordToggle('toggleAdminPassword', 'adminPassword');
+
+      const form = document.getElementById('formAdminLogin');
+      const submitBtn = document.getElementById('btnSubmitAdminLogin');
+      const submitBtnText = document.getElementById('submitBtnText');
+      const alertBox = document.getElementById('authAlert');
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearErrors();
+
+        const email = document.getElementById('adminEmail').value.trim();
+        const password = document.getElementById('adminPassword').value;
+
+        // Validation
+        let hasError = false;
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email) {
+          showFieldError('emailError', 'Please enter your administrator email.');
+          hasError = true;
+        } else if (!emailRegex.test(email)) {
+          showFieldError('emailError', 'Please enter a valid email address.');
+          hasError = true;
+        }
+
+        if (!password) {
+          showFieldError('passwordError', 'Please enter your password.');
+          hasError = true;
+        }
+
+        if (hasError) return;
+
+        setLoading(true);
+
+        try {
+          // 1. Sign in with Supabase Auth
+          await SkillPathAuth.signIn(email, password);
+
+          // 2. Fetch profile to check role
+          const profile = await SkillPathAuth.getProfile();
+
+          if (profile && profile.role === 'admin') {
+            showAlert('success', '🛡️ Administrator verified! Opening Admin Dashboard...');
+            setTimeout(() => {
+              window.location.href = 'admin.html';
+            }, 500);
+          } else {
+            // User is not an admin - sign out immediately!
+            const client = SkillPathAuth.getClient();
+            if (client) {
+              await client.auth.signOut();
+            }
+            setLoading(false);
+            showAlert('error', '⚠️ Access denied: This account is not an admin.');
+          }
+        } catch (err) {
+          setLoading(false);
+          let message = err.message || 'Authentication failed. Please verify credentials.';
+          if (message.includes('Invalid login credentials')) {
+            message = 'Invalid administrator email or password.';
+          }
+          showAlert('error', message);
+        }
+      });
+
+      function clearErrors() {
+        document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+        alertBox.style.display = 'none';
+        alertBox.className = 'auth-alert';
+        alertBox.textContent = '';
+      }
+
+      function showFieldError(elementId, message) {
+        const el = document.getElementById(elementId);
+        if (el) el.textContent = message;
+      }
+
+      function showAlert(type, message) {
+        alertBox.className = `auth-alert alert-${type}`;
+        alertBox.innerHTML = message;
+        alertBox.style.display = 'block';
+      }
+
+      function setLoading(isLoading) {
+        submitBtn.disabled = isLoading;
+        if (isLoading) {
+          submitBtn.classList.add('btn-loading');
+          submitBtnText.textContent = 'Verifying Admin Access...';
+        } else {
+          submitBtn.classList.remove('btn-loading');
+          submitBtnText.textContent = 'Sign In to Admin Dashboard';
+        }
+      }
+    });
+  </script>
+</body>
+</html>

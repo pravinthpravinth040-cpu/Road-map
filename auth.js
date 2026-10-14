@@ -1,9 +1,9 @@
 /**
  * ============================================================================
  * SkillPath - Authentication & Session Engine (auth.js)
- * Powered by Supabase Authentication
- * Handles sign up, sign in, sign out, password recovery, route protection,
- * and user profile navigation menu.
+ * Powered by Supabase Authentication (Pinned SDK)
+ * Handles sign up, sign in, admin verification, password reset,
+ * and dynamic role-aware navigation.
  * ============================================================================
  */
 
@@ -82,6 +82,58 @@ const SkillPathAuth = {
   },
 
   /**
+   * Get user profile including role ('user' or 'admin')
+   */
+  async getProfile() {
+    const user = await this.getUser();
+    if (!user) return null;
+
+    const client = this.getClient();
+    if (!client) return null;
+
+    try {
+      const { data, error } = await client
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('Could not fetch user profile:', error);
+        return {
+          id: user.id,
+          email: user.email,
+          full_name: (user.user_metadata && user.user_metadata.full_name) || '',
+          role: 'user'
+        };
+      }
+
+      return data || {
+        id: user.id,
+        email: user.email,
+        full_name: (user.user_metadata && user.user_metadata.full_name) || '',
+        role: 'user'
+      };
+    } catch (e) {
+      console.warn('Profile fetch exception:', e);
+      return {
+        id: user.id,
+        email: user.email,
+        full_name: (user.user_metadata && user.user_metadata.full_name) || '',
+        role: 'user'
+      };
+    }
+  },
+
+  /**
+   * Check if current user has 'admin' role
+   */
+  async isAdmin() {
+    const profile = await this.getProfile();
+    return !!(profile && profile.role === 'admin');
+  },
+
+  /**
    * Register a new user
    */
   async signUp(email, password, fullName) {
@@ -98,7 +150,7 @@ const SkillPathAuth = {
         data: {
           full_name: cleanName
         },
-        emailRedirectTo: `${window.location.origin}/login.html`
+        emailRedirectTo: `${window.location.origin}/signin.html`
       }
     });
 
@@ -109,7 +161,7 @@ const SkillPathAuth = {
   /**
    * Sign in an existing user
    */
-  async signIn(email, password, rememberMe = true) {
+  async signIn(email, password) {
     const client = this.getClient();
     if (!client) throw new Error('Supabase client is not available.');
 
@@ -125,24 +177,22 @@ const SkillPathAuth = {
   },
 
   /**
-   * Sign out the current user
+   * Sign out current user and redirect to index.html
    */
   async signOut() {
     const client = this.getClient();
-    if (!client) return;
-
-    try {
-      await client.auth.signOut();
-    } catch (e) {
-      console.warn('Error during sign out:', e);
+    if (client) {
+      try {
+        await client.auth.signOut();
+      } catch (e) {
+        console.warn('Error during sign out:', e);
+      }
     }
-
-    // Redirect to login page
-    window.location.href = 'login.html';
+    window.location.href = 'index.html';
   },
 
   /**
-   * Send a password reset email
+   * Send password reset email
    */
   async resetPasswordForEmail(email) {
     const client = this.getClient();
@@ -160,7 +210,7 @@ const SkillPathAuth = {
   },
 
   /**
-   * Update the user's password (used in reset-password.html)
+   * Update user password
    */
   async updatePassword(newPassword) {
     const client = this.getClient();
@@ -175,28 +225,41 @@ const SkillPathAuth = {
   },
 
   /**
-   * Page Protection: Redirect to login if user is not authenticated
+   * Route Guard: Require user to be authenticated, redirect to signin.html otherwise
    */
   async requireAuth() {
     const session = await this.getSession();
     if (!session) {
-      const currentUrl = window.location.pathname.split('/').pop() + window.location.search;
-      const redirectParam = encodeURIComponent(currentUrl || 'index.html');
-      window.location.href = `login.html?redirect=${redirectParam}`;
+      window.location.href = 'signin.html';
       return null;
     }
     return session.user;
   },
 
   /**
-   * Auth Page Protection: Redirect to dashboard if user is already authenticated
+   * Route Guard: Require user to have 'admin' role, redirect to index.html otherwise
+   */
+  async requireAdmin() {
+    const session = await this.getSession();
+    if (!session) {
+      window.location.href = 'admin-login.html';
+      return null;
+    }
+    const adminStatus = await this.isAdmin();
+    if (!adminStatus) {
+      window.location.href = 'index.html';
+      return null;
+    }
+    return session.user;
+  },
+
+  /**
+   * Guest Route Guard: Redirect already authenticated users to index.html
    */
   async redirectIfAuthenticated() {
     const session = await this.getSession();
     if (session) {
-      const params = new URLSearchParams(window.location.search);
-      const redirectUrl = params.get('redirect') || 'index.html';
-      window.location.href = redirectUrl;
+      window.location.href = 'index.html';
       return true;
     }
     return false;
@@ -212,24 +275,18 @@ const SkillPathAuth = {
     const user = await this.getUser();
 
     if (user) {
-      const fullName = (user.user_metadata && user.user_metadata.full_name) || '';
-      const displayName = fullName || user.email.split('@')[0];
+      const profile = await this.getProfile();
+      const isAdmin = profile && profile.role === 'admin';
+      const displayName = (profile && profile.full_name) || (user.user_metadata && user.user_metadata.full_name) || user.email.split('@')[0];
       const initial = displayName.charAt(0).toUpperCase();
-
-      // Check if user has legacy localStorage data
-      let hasLocalData = false;
-      try {
-        const raw = localStorage.getItem('skillpath_db_v1');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && ((parsed.domains && parsed.domains.length > 0) || (parsed.resources && parsed.resources.length > 0))) {
-            hasLocalData = true;
-          }
-        }
-      } catch (e) {}
 
       container.innerHTML = `
         <div class="user-dropdown-wrapper">
+          ${isAdmin ? `
+            <a href="admin.html" class="btn btn-outline btn-sm admin-nav-btn" style="border-color: #818cf8; color: #a5b4fc; margin-right: 0.35rem;" title="Go to Admin Dashboard">
+              🛡️ Admin
+            </a>
+          ` : ''}
           <button id="userDropdownBtn" class="user-profile-btn" aria-haspopup="true" aria-expanded="false">
             <span class="user-avatar-circle">${escapeHtml(initial)}</span>
             <span class="user-name-label">${escapeHtml(displayName)}</span>
@@ -240,12 +297,13 @@ const SkillPathAuth = {
             <div class="user-dropdown-header">
               <span class="dropdown-user-name">${escapeHtml(displayName)}</span>
               <span class="dropdown-user-email">${escapeHtml(user.email)}</span>
+              ${isAdmin ? '<span class="admin-role-badge">🛡️ Administrator</span>' : '<span class="user-role-badge">👤 Student</span>'}
             </div>
 
-            ${hasLocalData ? `
-              <button id="btnImportLocalDataNav" class="dropdown-item import-item">
-                <span>📥 Import Local Data</span>
-              </button>
+            ${isAdmin ? `
+              <a href="admin.html" class="dropdown-item admin-dropdown-item" style="color: #a5b4fc; font-weight: 600;">
+                <span>🛡️ Admin Dashboard</span>
+              </a>
             ` : ''}
 
             <a href="index.html" class="dropdown-item">📊 My Roadmaps</a>
@@ -288,36 +346,12 @@ const SkillPathAuth = {
           SkillPathAuth.signOut();
         };
       }
-
-      // Local data import handler
-      const importBtn = document.getElementById('btnImportLocalDataNav');
-      if (importBtn) {
-        importBtn.onclick = async () => {
-          if (typeof SkillPathDB !== 'undefined' && SkillPathDB.importLocalDataToAccount) {
-            importBtn.disabled = true;
-            importBtn.textContent = 'Importing...';
-            const res = await SkillPathDB.importLocalDataToAccount();
-            if (res.success) {
-              if (typeof showToast === 'function') {
-                showToast(`Successfully imported ${res.count} roadmaps to your account!`, 'success');
-              }
-              setTimeout(() => window.location.reload(), 1200);
-            } else {
-              if (typeof showToast === 'function') {
-                showToast(res.error || 'Failed to import local data.', 'error');
-              }
-              importBtn.disabled = false;
-              importBtn.textContent = '📥 Import Local Data';
-            }
-          }
-        };
-      }
     } else {
-      // Logged out: Show Log In & Sign Up buttons
+      // Logged out: Show Sign In & Sign Up buttons
       container.innerHTML = `
         <div class="nav-guest-actions">
-          <a href="login.html" class="btn btn-outline btn-sm">Log In</a>
-          <a href="register.html" class="btn btn-primary btn-sm">Sign Up</a>
+          <a href="signin.html" class="btn btn-outline btn-sm">Sign In</a>
+          <a href="signup.html" class="btn btn-primary btn-sm">Sign Up</a>
         </div>
       `;
     }

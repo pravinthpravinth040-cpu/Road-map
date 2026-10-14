@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In - SkillPath: IT Career Roadmap Tracker</title>
+  <meta name="description" content="Sign in to your SkillPath account to access your IT learning roadmaps, weekly planner, and progress tracker.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Supabase CDN (Pinned Version) & Config -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+</head>
+<body class="auth-page-body">
+
+  <!-- Minimal Brand Header -->
+  <header class="auth-navbar">
+    <div class="container auth-nav-container">
+      <a href="index.html" class="brand" aria-label="SkillPath Home">
+        <div class="brand-icon">⚡</div>
+        <span>Skill<span class="brand-accent">Path</span></span>
+      </a>
+      <a href="signup.html" class="btn btn-primary btn-sm">Sign Up</a>
+    </div>
+  </header>
+
+  <!-- Auth Main Container -->
+  <main class="auth-container">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-badge-icon">🔑</div>
+        <h1 class="auth-title">Welcome Back</h1>
+        <div class="auth-brand-headline">SkillPath: IT Career Roadmap Tracker</div>
+        <p class="auth-brand-tagline">Sign in to access your roadmaps, track global and personal learning milestones, and manage your weekly study goals.</p>
+      </div>
+
+      <!-- Alert Box -->
+      <div id="authAlert" class="auth-alert" role="alert" style="display: none;"></div>
+
+      <form id="formSignin" novalidate>
+        <!-- Email -->
+        <div class="form-group">
+          <label for="email" class="form-label">Email Address <span class="req">*</span></label>
+          <input
+            type="email"
+            id="email"
+            class="form-control"
+            placeholder="student@example.com"
+            required
+            autocomplete="email"
+          >
+          <div class="field-error" id="emailError"></div>
+        </div>
+
+        <!-- Password -->
+        <div class="form-group">
+          <div class="label-with-link">
+            <label for="password" class="form-label" style="margin-bottom: 0;">Password <span class="req">*</span></label>
+            <a href="forgot-password.html" class="auth-sublink">Forgot password?</a>
+          </div>
+          <div class="password-input-wrapper">
+            <input
+              type="password"
+              id="password"
+              class="form-control"
+              placeholder="Enter your password"
+              required
+              autocomplete="current-password"
+            >
+            <button type="button" id="togglePassword" class="password-toggle-btn" aria-label="Show password">👁️</button>
+          </div>
+          <div class="field-error" id="passwordError"></div>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" id="btnSubmitSignin" class="btn btn-primary auth-submit-btn">
+          <span id="submitBtnText">Sign In</span>
+        </button>
+      </form>
+
+      <div class="auth-card-footer">
+        <p>New here? <a href="signup.html" class="auth-link">Create an account</a></p>
+        <p style="margin-top: 0.5rem; font-size: 0.8rem;">
+          Staff or Course Admin? <a href="admin-login.html" class="auth-sublink" style="color: #a5b4fc;">🛡️ Admin Portal</a>
+        </p>
+      </div>
+
+      <div class="auth-privacy-footer">
+        Learn how we protect your roadmap progress in our <a href="privacy.html">Privacy Policy</a>.
+      </div>
+    </div>
+  </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Redirect if already authenticated
+      await SkillPathAuth.redirectIfAuthenticated();
+
+      // Show/Hide Password toggle
+      SkillPathAuth.initPasswordToggle('togglePassword', 'password');
+
+      const form = document.getElementById('formSignin');
+      const submitBtn = document.getElementById('btnSubmitSignin');
+      const submitBtnText = document.getElementById('submitBtnText');
+      const alertBox = document.getElementById('authAlert');
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearErrors();
+
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+
+        // Validation
+        let hasError = false;
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email) {
+          showFieldError('emailError', 'Please enter your email address.');
+          hasError = true;
+        } else if (!emailRegex.test(email)) {
+          showFieldError('emailError', 'Please enter a valid email address.');
+          hasError = true;
+        }
+
+        if (!password) {
+          showFieldError('passwordError', 'Please enter your password.');
+          hasError = true;
+        }
+
+        if (hasError) return;
+
+        setLoading(true);
+
+        try {
+          await SkillPathAuth.signIn(email, password);
+          setLoading(false);
+
+          showAlert('success', '✅ Signed in successfully! Redirecting...');
+          setTimeout(() => {
+            window.location.href = 'index.html';
+          }, 400);
+        } catch (err) {
+          setLoading(false);
+          let message = err.message || 'Invalid email or password.';
+          if (message.includes('Invalid login credentials')) {
+            message = 'Invalid email or password. Please verify and try again.';
+          } else if (message.includes('Email not confirmed')) {
+            message = 'Please confirm your email address before signing in. Check your inbox or spam folder.';
+          }
+          showAlert('error', message);
+        }
+      });
+
+      function clearErrors() {
+        document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+        alertBox.style.display = 'none';
+        alertBox.className = 'auth-alert';
+        alertBox.textContent = '';
+      }
+
+      function showFieldError(elementId, message) {
+        const el = document.getElementById(elementId);
+        if (el) el.textContent = message;
+      }
+
+      function showAlert(type, message) {
+        alertBox.className = `auth-alert alert-${type}`;
+        alertBox.innerHTML = message;
+        alertBox.style.display = 'block';
+      }
+
+      function setLoading(isLoading) {
+        submitBtn.disabled = isLoading;
+        if (isLoading) {
+          submitBtn.classList.add('btn-loading');
+          submitBtnText.textContent = 'Signing In...';
+        } else {
+          submitBtn.classList.remove('btn-loading');
+          submitBtnText.textContent = 'Sign In';
+        }
+      }
+    });
+  </script>
+</body>
+</html>
