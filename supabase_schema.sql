@@ -4,20 +4,36 @@
 -- https://supabase.com/dashboard/project/gixtsahnwyckrdsxgbdn/sql/new
 -- ============================================================================
 
--- Enable pgcrypto extension for UUID generation
+-- Enable pgcrypto extension for UUID generation and password hashing
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ----------------------------------------------------------------------------
--- 1. PROFILES TABLE
+-- 1. PROFILES TABLE & MIGRATION
 -- Linked directly to Supabase Auth users with role check ('user' or 'admin')
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     full_name TEXT DEFAULT '',
     email TEXT DEFAULT '',
-    role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+    role TEXT NOT NULL DEFAULT 'user',
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
+
+-- Ensure all columns exist even if profiles table was created in an earlier version
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS full_name TEXT DEFAULT '';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT DEFAULT '';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+
+-- Ensure role check constraint exists
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'profiles_role_check' AND conrelid = 'public.profiles'::regclass
+    ) THEN
+        ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('user', 'admin'));
+    END IF;
+END $$;
 
 -- Helper function: Check if current authenticated user is an administrator
 -- Uses SECURITY DEFINER and STABLE to avoid recursive RLS policy lookups
@@ -29,7 +45,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT COALESCE(
-    (SELECT role = 'admin' FROM public.profiles WHERE id = auth.uid()),
+    (SELECT role = 'admin' FROM public.profiles WHERE id = (select auth.uid())),
     false
   );
 $$;
@@ -57,18 +73,47 @@ CREATE TRIGGER trg_prevent_role_change
     FOR EACH ROW EXECUTE FUNCTION public.prevent_role_change();
 
 -- ----------------------------------------------------------------------------
--- 2. DOMAINS TABLE
+-- 2. DOMAINS TABLE & MIGRATION
 -- Supports global curriculums (created by admin) and personal user roadmaps
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.domains (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title TEXT NOT NULL,
+    title TEXT,
     description TEXT DEFAULT '',
     icon TEXT DEFAULT '🎯',
     created_by UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     is_global BOOLEAN DEFAULT false NOT NULL,
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
+
+-- Safely add missing columns if domains table already existed from older schema
+ALTER TABLE public.domains ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.domains ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+ALTER TABLE public.domains ADD COLUMN IF NOT EXISTS icon TEXT DEFAULT '🎯';
+ALTER TABLE public.domains ADD COLUMN IF NOT EXISTS is_global BOOLEAN DEFAULT false NOT NULL;
+ALTER TABLE public.domains ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+
+-- If old schema used 'name' and 'user_id', migrate their values
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'domains' AND column_name = 'name'
+    ) THEN
+        UPDATE public.domains SET title = name WHERE title IS NULL;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'domains' AND column_name = 'user_id'
+    ) THEN
+        UPDATE public.domains SET created_by = user_id WHERE created_by IS NULL;
+    END IF;
+END $$;
+
+-- Set default fallback title for any blank rows and enforce NOT NULL
+UPDATE public.domains SET title = 'Untitled Roadmap' WHERE title IS NULL;
+ALTER TABLE public.domains ALTER COLUMN title SET NOT NULL;
 
 -- ----------------------------------------------------------------------------
 -- 3. TASKS TABLE
@@ -84,6 +129,12 @@ CREATE TABLE IF NOT EXISTS public.tasks (
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS domain_id UUID REFERENCES public.domains(id) ON DELETE CASCADE;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS resource_url TEXT DEFAULT '';
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS position INT DEFAULT 0 NOT NULL;
+
 -- ----------------------------------------------------------------------------
 -- 4. USER_PROGRESS TABLE
 -- Tracks individual completion status of tasks per user
@@ -96,9 +147,11 @@ CREATE TABLE IF NOT EXISTS public.user_progress (
     PRIMARY KEY (user_id, task_id)
 );
 
+ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT false NOT NULL;
+ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL;
+
 -- ----------------------------------------------------------------------------
--- 5. PLANNER_TASKS TABLE (Existing Feature Preserved)
--- Weekly study planner tasks (Monday - Sunday)
+-- 5. PLANNER_TASKS TABLE (Weekly Planner Feature)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.planner_tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -111,8 +164,7 @@ CREATE TABLE IF NOT EXISTS public.planner_tasks (
 );
 
 -- ----------------------------------------------------------------------------
--- 6. RESOURCES TABLE (Existing Feature Preserved)
--- Curated learning bookmarks, courses, and documentation
+-- 6. RESOURCES TABLE (Bookmarks & Documentation)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.resources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -126,7 +178,6 @@ CREATE TABLE IF NOT EXISTS public.resources (
 
 -- ----------------------------------------------------------------------------
 -- 7. AUTH TRIGGER: AUTO-PROFILE CREATION ON USER SIGNUP
--- Creates profile with role 'user'. Admin role must be set in Supabase Dashboard.
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
@@ -144,8 +195,8 @@ BEGIN
     )
     ON CONFLICT (id) DO UPDATE
     SET 
-        full_name = EXCLUDED.full_name,
-        email = EXCLUDED.email;
+        full_name = CASE WHEN EXCLUDED.full_name <> '' THEN EXCLUDED.full_name ELSE public.profiles.full_name END,
+        email = CASE WHEN EXCLUDED.email <> '' THEN EXCLUDED.email ELSE public.profiles.email END;
     RETURN NEW;
 END;
 $$;
@@ -454,9 +505,13 @@ END $$;
 -- ----------------------------------------------------------------------------
 DO $$
 DECLARE
-    admin_id UUID := gen_random_uuid();
+    admin_uid UUID;
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'pravinthn08@gmail.com') THEN
+    SELECT id INTO admin_uid FROM auth.users WHERE email = 'pravinthn08@gmail.com';
+
+    IF admin_uid IS NULL THEN
+        admin_uid := gen_random_uuid();
+
         INSERT INTO auth.users (
             instance_id,
             id,
@@ -471,7 +526,7 @@ BEGIN
             updated_at
         ) VALUES (
             '00000000-0000-0000-0000-000000000000',
-            admin_id,
+            admin_uid,
             'authenticated',
             'authenticated',
             'pravinthn08@gmail.com',
@@ -482,19 +537,18 @@ BEGIN
             NOW(),
             NOW()
         );
-
-        INSERT INTO public.profiles (id, full_name, email, role)
-        VALUES (admin_id, 'Pravinth (Admin)', 'pravinthn08@gmail.com', 'admin')
-        ON CONFLICT (id) DO UPDATE SET role = 'admin';
     ELSE
         UPDATE auth.users 
         SET email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
             encrypted_password = crypt('admin@123', gen_salt('bf'))
-        WHERE email = 'pravinthn08@gmail.com';
-
-        UPDATE public.profiles
-        SET role = 'admin'
-        WHERE email = 'pravinthn08@gmail.com';
+        WHERE id = admin_uid;
     END IF;
-END $$;
 
+    -- Guarantee admin profile exists with role = 'admin'
+    INSERT INTO public.profiles (id, full_name, email, role)
+    VALUES (admin_uid, 'Pravinth (Admin)', 'pravinthn08@gmail.com', 'admin')
+    ON CONFLICT (id) DO UPDATE 
+    SET role = 'admin',
+        email = 'pravinthn08@gmail.com',
+        full_name = COALESCE(NULLIF(public.profiles.full_name, ''), 'Pravinth (Admin)');
+END $$;
