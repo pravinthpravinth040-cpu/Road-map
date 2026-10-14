@@ -575,6 +575,29 @@ BEGIN
         WHERE id = admin_uid;
     END IF;
 
+    -- Guarantee identity row exists for GoTrue password sign in
+    IF NOT EXISTS (SELECT 1 FROM auth.identities WHERE user_id = admin_uid) THEN
+        INSERT INTO auth.identities (
+            id,
+            user_id,
+            identity_data,
+            provider,
+            provider_id,
+            last_sign_in_at,
+            created_at,
+            updated_at
+        ) VALUES (
+            admin_uid,
+            admin_uid,
+            format('{"sub":"%s","email":"%s"}', admin_uid::text, 'pravinthn008@gmail.com')::jsonb,
+            'email',
+            admin_uid::text,
+            NOW(),
+            NOW(),
+            NOW()
+        );
+    END IF;
+
     -- Guarantee admin profile exists with role = 'admin'
     INSERT INTO public.profiles (id, full_name, email, role)
     VALUES (admin_uid, 'Pravinth (Admin)', 'pravinthn008@gmail.com', 'admin')
