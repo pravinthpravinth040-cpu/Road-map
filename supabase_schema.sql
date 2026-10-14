@@ -531,14 +531,14 @@ END $$;
 
 -- ----------------------------------------------------------------------------
 -- 12. SEED DEFAULT ADMINISTRATOR ACCOUNT
--- Admin Email: pravinthn08@gmail.com
+-- Admin Email: pravinthn008@gmail.com
 -- Admin Password: admin@123
 -- ----------------------------------------------------------------------------
 DO $$
 DECLARE
     admin_uid UUID;
 BEGIN
-    SELECT id INTO admin_uid FROM auth.users WHERE email = 'pravinthn08@gmail.com';
+    SELECT id INTO admin_uid FROM auth.users WHERE email = 'pravinthn008@gmail.com';
 
     IF admin_uid IS NULL THEN
         admin_uid := gen_random_uuid();
@@ -560,7 +560,7 @@ BEGIN
             admin_uid,
             'authenticated',
             'authenticated',
-            'pravinthn08@gmail.com',
+            'pravinthn008@gmail.com',
             crypt('admin@123', gen_salt('bf')),
             NOW(),
             '{"provider":"email","providers":["email"]}',
@@ -577,9 +577,9 @@ BEGIN
 
     -- Guarantee admin profile exists with role = 'admin'
     INSERT INTO public.profiles (id, full_name, email, role)
-    VALUES (admin_uid, 'Pravinth (Admin)', 'pravinthn08@gmail.com', 'admin')
+    VALUES (admin_uid, 'Pravinth (Admin)', 'pravinthn008@gmail.com', 'admin')
     ON CONFLICT (id) DO UPDATE 
     SET role = 'admin',
-        email = 'pravinthn08@gmail.com',
+        email = 'pravinthn008@gmail.com',
         full_name = COALESCE(NULLIF(public.profiles.full_name, ''), 'Pravinth (Admin)');
 END $$;
