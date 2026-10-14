@@ -93,27 +93,57 @@ ALTER TABLE public.domains ADD COLUMN IF NOT EXISTS icon TEXT DEFAULT '🎯';
 ALTER TABLE public.domains ADD COLUMN IF NOT EXISTS is_global BOOLEAN DEFAULT false NOT NULL;
 ALTER TABLE public.domains ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 
--- If old schema used 'name' and 'user_id', migrate their values
+-- If old schema used 'name' and 'user_id', migrate their values and drop NOT NULL constraints
 DO $$
 BEGIN
-    IF EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_schema = 'public' AND table_name = 'domains' AND column_name = 'name'
-    ) THEN
-        UPDATE public.domains SET title = name WHERE title IS NULL;
-    END IF;
-
+    -- Drop legacy NOT NULL constraints from older schema so global domains (which have no personal user_id) can be inserted
     IF EXISTS (
         SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' AND table_name = 'domains' AND column_name = 'user_id'
     ) THEN
+        ALTER TABLE public.domains ALTER COLUMN user_id DROP NOT NULL;
         UPDATE public.domains SET created_by = user_id WHERE created_by IS NULL;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'domains' AND column_name = 'name'
+    ) THEN
+        ALTER TABLE public.domains ALTER COLUMN name DROP NOT NULL;
+        UPDATE public.domains SET title = name WHERE title IS NULL;
     END IF;
 END $$;
 
--- Set default fallback title for any blank rows and enforce NOT NULL
+-- Set default fallback title for any blank rows and enforce NOT NULL on title
 UPDATE public.domains SET title = 'Untitled Roadmap' WHERE title IS NULL;
 ALTER TABLE public.domains ALTER COLUMN title SET NOT NULL;
+
+-- Keep title <-> name and created_by <-> user_id synchronized for backwards compatibility
+CREATE OR REPLACE FUNCTION public.sync_domain_fields()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.title IS NULL AND NEW.name IS NOT NULL THEN
+        NEW.title := NEW.name;
+    ELSIF NEW.name IS NULL AND NEW.title IS NOT NULL THEN
+        NEW.name := NEW.title;
+    END IF;
+
+    IF NEW.created_by IS NULL AND NEW.user_id IS NOT NULL THEN
+        NEW.created_by := NEW.user_id;
+    ELSIF NEW.user_id IS NULL AND NEW.created_by IS NOT NULL THEN
+        NEW.user_id := NEW.created_by;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_sync_domain_fields ON public.domains;
+CREATE TRIGGER trg_sync_domain_fields
+    BEFORE INSERT OR UPDATE ON public.domains
+    FOR EACH ROW EXECUTE FUNCTION public.sync_domain_fields();
 
 -- ----------------------------------------------------------------------------
 -- 3. TASKS TABLE
@@ -463,7 +493,7 @@ BEGIN
         (ai_id, 'Python for AI & Numerical Computing', 'NumPy, Pandas, Vectorization and Matrix math fundamentals', 'https://numpy.org/doc/stable/', 1),
         (ai_id, 'Deep Learning Foundations with PyTorch', 'Tensors, Autograd, Neural network building blocks and training loops', 'https://pytorch.org/tutorials/', 2),
         (ai_id, 'Large Language Models (LLMs) & Prompt Engineering', 'Context windows, tokens, temperature, and few-shot prompting techniques', 'https://platform.openai.com/docs/guides/prompt-engineering', 3),
-        (ai_id, 'Retrieval-Augmented Generation (RAG)', 'Vector databases, embeddings (pgvector, Pinecone), and document chunking', 'https://supabase.com/docs/guides/ai', 4),
+        (ai_id, 'Retrieval-Augated Generation (RAG)', 'Vector databases, embeddings (pgvector, Pinecone), and document chunking', 'https://supabase.com/docs/guides/ai', 4),
         (ai_id, 'AI Agent Frameworks & Production Deployment', 'Building autonomous agents with LangGraph, CrewAI, and FastAPI microservices', 'https://fastapi.tiangolo.com/', 5);
 
         -- Full Stack Development
