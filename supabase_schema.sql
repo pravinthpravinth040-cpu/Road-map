@@ -136,9 +136,20 @@ ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS resource_url TEXT DEFAULT '';
 ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS position INT DEFAULT 0 NOT NULL;
 
 -- ----------------------------------------------------------------------------
--- 4. USER_PROGRESS TABLE
+-- 4. USER_PROGRESS TABLE & MIGRATION
 -- Tracks individual completion status of tasks per user
 -- ----------------------------------------------------------------------------
+-- If user_progress exists with an obsolete schema (e.g. stage_id or item_type), drop it to recreate cleanly
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'user_progress' AND (column_name = 'stage_id' OR column_name = 'item_type')
+    ) THEN
+        DROP TABLE public.user_progress CASCADE;
+    END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS public.user_progress (
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
     task_id UUID REFERENCES public.tasks(id) ON DELETE CASCADE NOT NULL,
@@ -147,6 +158,7 @@ CREATE TABLE IF NOT EXISTS public.user_progress (
     PRIMARY KEY (user_id, task_id)
 );
 
+ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS task_id UUID REFERENCES public.tasks(id) ON DELETE CASCADE;
 ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT false NOT NULL;
 ALTER TABLE public.user_progress ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL;
 
@@ -259,7 +271,6 @@ CREATE POLICY "Users can insert own profile"
     WITH CHECK ((select auth.uid()) = id);
 
 -- DOMAINS POLICIES
--- Read: Global domains are public to all signed-in users (and guests); personal domains to owner or admin
 DROP POLICY IF EXISTS "Select domains" ON public.domains;
 CREATE POLICY "Select domains"
     ON public.domains FOR SELECT
@@ -272,7 +283,6 @@ CREATE POLICY "Anon select global domains"
     TO anon
     USING (is_global = true);
 
--- Insert: Admins can insert global domains; users can insert only their own personal domains
 DROP POLICY IF EXISTS "Insert domains" ON public.domains;
 CREATE POLICY "Insert domains"
     ON public.domains FOR INSERT
@@ -283,7 +293,6 @@ CREATE POLICY "Insert domains"
         (NOT is_global AND created_by = (select auth.uid()))
     );
 
--- Update: Admins can update any domain; users can update only their personal domains
 DROP POLICY IF EXISTS "Update domains" ON public.domains;
 CREATE POLICY "Update domains"
     ON public.domains FOR UPDATE
@@ -299,7 +308,6 @@ CREATE POLICY "Update domains"
         (NOT is_global AND created_by = (select auth.uid()))
     );
 
--- Delete: Admins can delete any domain; users can delete only their personal domains
 DROP POLICY IF EXISTS "Delete domains" ON public.domains;
 CREATE POLICY "Delete domains"
     ON public.domains FOR DELETE
@@ -311,7 +319,6 @@ CREATE POLICY "Delete domains"
     );
 
 -- TASKS POLICIES
--- Read: Tasks belonging to global domains or to user's personal domains
 DROP POLICY IF EXISTS "Select tasks" ON public.tasks;
 CREATE POLICY "Select tasks"
     ON public.tasks FOR SELECT
@@ -336,7 +343,6 @@ CREATE POLICY "Anon select global tasks"
         )
     );
 
--- Insert: Admins can insert tasks for global domains; users can insert only into their personal domains
 DROP POLICY IF EXISTS "Insert tasks" ON public.tasks;
 CREATE POLICY "Insert tasks"
     ON public.tasks FOR INSERT
@@ -353,7 +359,6 @@ CREATE POLICY "Insert tasks"
         )
     );
 
--- Update: Admins can update tasks for global domains; users can update only in their personal domains
 DROP POLICY IF EXISTS "Update tasks" ON public.tasks;
 CREATE POLICY "Update tasks"
     ON public.tasks FOR UPDATE
@@ -381,7 +386,6 @@ CREATE POLICY "Update tasks"
         )
     );
 
--- Delete: Admins can delete tasks for global domains; users can delete only in their personal domains
 DROP POLICY IF EXISTS "Delete tasks" ON public.tasks;
 CREATE POLICY "Delete tasks"
     ON public.tasks FOR DELETE
@@ -399,14 +403,12 @@ CREATE POLICY "Delete tasks"
     );
 
 -- USER_PROGRESS POLICIES
--- Read: Users can select their own progress; Admins can select all progress to compute completion stats
 DROP POLICY IF EXISTS "Select user progress" ON public.user_progress;
 CREATE POLICY "Select user progress"
     ON public.user_progress FOR SELECT
     TO authenticated
     USING (user_id = (select auth.uid()) OR public.is_admin());
 
--- Insert/Update/Delete: Users can only write and change their own progress
 DROP POLICY IF EXISTS "Insert user progress" ON public.user_progress;
 CREATE POLICY "Insert user progress"
     ON public.user_progress FOR INSERT
@@ -444,7 +446,6 @@ CREATE POLICY "Users manage own resources"
 
 -- ----------------------------------------------------------------------------
 -- 11. STARTER GLOBAL ROADMAP DATA (Optional Seed)
--- Insert standard curated IT domains if no global domains exist
 -- ----------------------------------------------------------------------------
 DO $$
 DECLARE
