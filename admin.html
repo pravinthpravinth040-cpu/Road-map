@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Dashboard - SkillPath: IT Career Roadmap Tracker</title>
-  <meta name="description" content="Manage global IT domains, curriculum milestones, and tasks for SkillPath students.">
+  <title>Admin Control Center - SkillPath: IT Career Roadmap Tracker</title>
+  <meta name="description" content="Central administrative control panel for managing SkillPath domains, tasks, weekly planner, resources, announcements, and student metrics.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 
-  <!-- Supabase CDN (Pinned Version) & Config -->
+  <!-- Supabase CDN & Central Config -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
   <script src="config.js"></script>
   <script src="auth.js"></script>
@@ -36,7 +36,6 @@
 
       <div class="nav-actions">
         <div id="navAuthContainer"></div>
-        <button id="btnTopAddDomain" class="btn btn-primary btn-sm">+ Add Global Domain</button>
         <button id="mobileMenuToggle" class="mobile-toggle" aria-label="Toggle Navigation Menu">☰</button>
       </div>
     </div>
@@ -46,26 +45,40 @@
   <main class="container" style="padding-top: 2rem; padding-bottom: 5rem;">
 
     <!-- Admin Hero Header -->
-    <section class="admin-header-card">
+    <section class="admin-header-card" style="margin-bottom: 1.5rem;">
       <div class="admin-title-row">
         <div>
-          <span class="admin-badge-indicator">🛡️ Administrator Console</span>
-          <h1 style="font-size: 2rem; margin-top: 0.5rem; margin-bottom: 0.25rem;">SkillPath: IT Career Roadmap Tracker</h1>
+          <span class="admin-badge-indicator">🛡️ Central Control Panel</span>
+          <h1 style="font-size: 2rem; margin-top: 0.5rem; margin-bottom: 0.25rem;">SkillPath Administrator Hub</h1>
           <p class="hero-subtitle" style="margin-bottom: 0;">
-            Manage official global domains, curate learning milestone tasks, and monitor platform-wide student completion rates.
+            Manage all platform curriculums, milestone tasks, weekly study schedules, curated resources, user access, and system announcements.
           </p>
         </div>
-        <div>
-          <button id="btnOpenNewDomainModal" class="btn btn-primary">+ Create Global Domain</button>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <a href="index.html" class="btn btn-outline btn-sm">👁️ View Student Dashboard</a>
         </div>
       </div>
+    </section>
 
-      <!-- Stats Grid -->
-      <div class="stats-grid" style="margin-top: 1.5rem; margin-bottom: 0;">
+    <!-- Admin Navigation Tabs -->
+    <nav class="admin-tabs-nav" aria-label="Admin Control Tabs">
+      <button class="admin-tab-btn active" data-tab="tab-overview">📊 Overview</button>
+      <button class="admin-tab-btn" data-tab="tab-domains">🌐 Global Domains</button>
+      <button class="admin-tab-btn" data-tab="tab-tasks">📋 Curriculum Tasks</button>
+      <button class="admin-tab-btn" data-tab="tab-planner">📅 Weekly Planner</button>
+      <button class="admin-tab-btn" data-tab="tab-resources">📚 Resources</button>
+      <button class="admin-tab-btn" data-tab="tab-users">👥 Users & Access</button>
+      <button class="admin-tab-btn" data-tab="tab-announcements">📢 Announcements</button>
+    </nav>
+
+    <!-- TAB 1: OVERVIEW -->
+    <div id="tab-overview" class="admin-tab-pane active">
+      <!-- High-level Metric Cards -->
+      <div class="stats-grid" style="margin-bottom: 2rem;">
         <div class="stat-card">
           <div class="stat-icon" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">👥</div>
           <div class="stat-info">
-            <span class="stat-value" id="statAdminUsers">0</span>
+            <span class="stat-value" id="statOverviewUsers">0</span>
             <span class="stat-label">Registered Students</span>
           </div>
         </div>
@@ -73,844 +86,613 @@
         <div class="stat-card">
           <div class="stat-icon" style="background: rgba(6, 182, 212, 0.15); color: #22d3ee;">🌐</div>
           <div class="stat-info">
-            <span class="stat-value" id="statAdminDomains">0</span>
-            <span class="stat-label">Global Domains</span>
+            <span class="stat-value" id="statOverviewDomains">0</span>
+            <span class="stat-label">Active Domains</span>
           </div>
         </div>
 
         <div class="stat-card">
           <div class="stat-icon" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">📋</div>
           <div class="stat-info">
-            <span class="stat-value" id="statAdminTasks">0</span>
-            <span class="stat-label">Total Curated Tasks</span>
+            <span class="stat-value" id="statOverviewTasks">0</span>
+            <span class="stat-label">Milestone Tasks</span>
           </div>
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">📈</div>
+          <div class="stat-icon" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">📚</div>
           <div class="stat-info">
-            <span class="stat-value" id="statAdminAvgCompletion">0%</span>
-            <span class="stat-label">Avg Student Completion</span>
+            <span class="stat-value" id="statOverviewResources">0</span>
+            <span class="stat-label">Curated Resources</span>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(168, 85, 247, 0.15); color: #c084fc;">📈</div>
+          <div class="stat-info">
+            <span class="stat-value" id="statOverviewAvgCompletion">0%</span>
+            <span class="stat-label">Platform Completion Rate</span>
           </div>
         </div>
       </div>
-    </section>
 
-    <!-- Admin Content Split -->
-    <div class="admin-grid-layout">
-
-      <!-- Left Column: Global Domains List -->
-      <section>
-        <div class="section-header" style="margin-bottom: 1rem;">
-          <h2 class="section-title" style="font-size: 1.25rem;">Global IT Domains</h2>
-          <span id="domainCountBadge" class="roadmap-badge badge-global">0 Roadmaps</span>
+      <!-- Domain Completion Breakdown -->
+      <div class="card" style="background: var(--bg-surface); border: 1px solid var(--border-card); border-radius: var(--radius-lg); padding: 1.5rem;">
+        <h2 style="font-size: 1.25rem; margin-bottom: 1rem;">Domain Completion Analytics</h2>
+        <div id="domainProgressBreakdown">
+          <p style="color: var(--text-dim);">Loading analytics...</p>
         </div>
-
-        <!-- Loading State for Domains -->
-        <div id="domainsLoading" class="loading-state" style="padding: 2rem; text-align: center;">
-          <div class="spinner"></div>
-          <p style="color: var(--text-dim); margin-top: 0.5rem;">Loading global roadmaps...</p>
-        </div>
-
-        <!-- Error State for Domains -->
-        <div id="domainsError" class="auth-alert alert-error" style="display: none;"></div>
-
-        <!-- Empty State for Domains -->
-        <div id="domainsEmpty" class="empty-state" style="display: none; padding: 2rem;">
-          <div class="empty-state-icon">🌐</div>
-          <h3 class="empty-state-title">No Global Domains Yet</h3>
-          <p class="empty-state-desc">Create your first official IT curriculum domain for students to follow.</p>
-          <button class="btn btn-primary btn-sm" onclick="openDomainModal()">+ Add First Domain</button>
-        </div>
-
-        <!-- Domain List Container -->
-        <div id="adminDomainList" class="admin-sidebar-list"></div>
-      </section>
-
-      <!-- Right Column: Tasks for Selected Domain -->
-      <section>
-        <div class="card" style="background: var(--bg-surface); border: 1px solid var(--border-card); border-radius: var(--radius-xl); padding: 1.5rem;">
-          <div id="taskPanelHeader" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 1rem; margin-bottom: 1.25rem;">
-            <div>
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span id="selectedDomainIcon" style="font-size: 1.5rem;">🎯</span>
-                <h2 id="selectedDomainTitle" style="font-size: 1.35rem; margin: 0;">Select a Domain</h2>
-              </div>
-              <p id="selectedDomainDesc" style="color: var(--text-muted); font-size: 0.85rem; margin: 0.25rem 0 0 0;">
-                Click any domain on the left to inspect and reorder its curriculum tasks.
-              </p>
-              <div id="selectedDomainCompletion" style="margin-top: 0.4rem; font-size: 0.8rem; color: #34d399; font-weight: 600;"></div>
-            </div>
-
-            <div id="taskHeaderActions" style="display: none; gap: 0.5rem;">
-              <button id="btnEditCurrentDomain" class="btn btn-secondary btn-sm">✏️ Edit Domain</button>
-              <button id="btnDeleteCurrentDomain" class="btn btn-danger btn-sm">🗑️ Delete Domain</button>
-              <button id="btnOpenAddTaskModal" class="btn btn-primary btn-sm">+ Add Task</button>
-            </div>
-          </div>
-
-          <!-- Tasks Loading State -->
-          <div id="tasksLoading" class="loading-state" style="display: none; padding: 2rem; text-align: center;">
-            <div class="spinner"></div>
-            <p style="color: var(--text-dim); margin-top: 0.5rem;">Loading tasks...</p>
-          </div>
-
-          <!-- Tasks Error State -->
-          <div id="tasksError" class="auth-alert alert-error" style="display: none;"></div>
-
-          <!-- Tasks Empty State -->
-          <div id="tasksEmpty" class="empty-state" style="display: none; padding: 2rem;">
-            <div class="empty-state-icon">📝</div>
-            <h3 class="empty-state-title">No tasks in this domain</h3>
-            <p class="empty-state-desc">Add step-by-step milestones, tutorials, or documentation tasks for this curriculum.</p>
-            <button class="btn btn-primary btn-sm" onclick="openTaskModal()">+ Add First Task</button>
-          </div>
-
-          <!-- Tasks List Container -->
-          <div id="adminTaskList"></div>
-        </div>
-      </section>
-
+      </div>
     </div>
 
-    <!-- Admin Footer -->
-    <div style="text-align: center; color: var(--text-dim); font-size: 0.85rem; margin-top: 4rem; border-top: 1px solid var(--border-subtle); padding-top: 1.5rem;">
-      <p>SkillPath: IT Career Roadmap Tracker — Administrative Control Center</p>
-      <p style="margin-top: 0.35rem;">
-        <a href="index.html">Student Dashboard</a> · <a href="privacy.html">Privacy Policy</a> · <a href="signin.html">Student Sign In</a>
-      </p>
+    <!-- TAB 2: DOMAINS -->
+    <div id="tab-domains" class="admin-tab-pane">
+      <div class="admin-table-container">
+        <div class="admin-table-toolbar">
+          <div style="display: flex; gap: 0.75rem; align-items: center; flex: 1; max-width: 450px;">
+            <input type="search" id="searchDomains" class="form-control" placeholder="🔍 Search domains by title or description...">
+          </div>
+          <button id="btnOpenAddDomainModal" class="btn btn-primary btn-sm">+ Add Global Domain</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th style="width: 50px;">Icon</th>
+                <th>Title</th>
+                <th>Description</th>
+                <th>Color</th>
+                <th>Order</th>
+                <th>Visibility</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="domainsTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
+    <!-- TAB 3: TASKS -->
+    <div id="tab-tasks" class="admin-tab-pane">
+      <div class="admin-table-container">
+        <div class="admin-table-toolbar">
+          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; flex: 1;">
+            <div style="min-width: 240px;">
+              <select id="filterTaskDomain" class="form-control">
+                <option value="">Select Domain...</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 200px; max-width: 350px;">
+              <input type="search" id="searchTasks" class="form-control" placeholder="🔍 Search tasks...">
+            </div>
+          </div>
+          <button id="btnOpenAddTaskModal" class="btn btn-primary btn-sm">+ Add Task</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th style="width: 60px;">Order</th>
+                <th>Task Title</th>
+                <th>Level</th>
+                <th>Est. Hours</th>
+                <th>Resource Link</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tasksTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: WEEKLY PLANNER -->
+    <div id="tab-planner" class="admin-tab-pane">
+      <!-- Template Toolbar -->
+      <div class="card" style="background: var(--bg-surface); border: 1px solid var(--border-card); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <label for="selectPlannerTemplate" style="font-weight: 600; font-size: 0.9rem; color: var(--text-main);">Study Plan Template:</label>
+            <select id="selectPlannerTemplate" class="form-control" style="min-width: 260px;">
+              <option value="">Loading templates...</option>
+            </select>
+            <span id="badgeTemplateDefault" class="badge-status-active" style="display: none;">★ Default Shown to Users</span>
+          </div>
+
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button id="btnSetTemplateDefault" class="btn btn-outline btn-sm" title="Set this template as the official plan displayed on planner.html">★ Set as Default</button>
+            <button id="btnEditTemplate" class="btn btn-secondary btn-sm">✏️ Edit Template</button>
+            <button id="btnDeleteTemplate" class="btn btn-danger btn-sm">🗑️ Delete Template</button>
+            <button id="btnOpenCreateTemplateModal" class="btn btn-primary btn-sm">+ New Template</button>
+          </div>
+        </div>
+        <p id="plannerTemplateDesc" style="color: var(--text-muted); font-size: 0.85rem; margin: 0.5rem 0 0 0;"></p>
+      </div>
+
+      <!-- Weekly 7-Day Grid for Selected Template -->
+      <div class="planner-grid" id="adminPlannerDaysGrid">
+        <!-- Monday to Sunday columns -->
+      </div>
+    </div>
+
+    <!-- TAB 5: RESOURCES -->
+    <div id="tab-resources" class="admin-tab-pane">
+      <div class="admin-table-container">
+        <div class="admin-table-toolbar">
+          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; flex: 1;">
+            <input type="search" id="searchResources" class="form-control" style="max-width: 320px;" placeholder="🔍 Search resources...">
+            <select id="filterResourceCategory" class="form-control" style="width: 180px;">
+              <option value="ALL">All Categories</option>
+              <option value="Documentation">Documentation</option>
+              <option value="Tutorial">Tutorial</option>
+              <option value="Course">Course</option>
+              <option value="Security Guide">Security Guide</option>
+              <option value="General">General</option>
+            </select>
+          </div>
+          <button id="btnOpenAddResourceModal" class="btn btn-primary btn-sm">+ Add Global Resource</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Linked Domain</th>
+                <th>URL</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="resourcesTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 6: USERS & ACCESS -->
+    <div id="tab-users" class="admin-tab-pane">
+      <div class="admin-table-container">
+        <div class="admin-table-toolbar">
+          <div style="display: flex; gap: 0.75rem; align-items: center; flex: 1; max-width: 400px;">
+            <input type="search" id="searchUsers" class="form-control" placeholder="🔍 Search users by name or email...">
+          </div>
+          <span id="userCountBadge" class="badge-role-user">0 Total Registered</span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Joined</th>
+                <th>Progress</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 7: ANNOUNCEMENTS -->
+    <div id="tab-announcements" class="admin-tab-pane">
+      <div class="admin-table-container">
+        <div class="admin-table-toolbar">
+          <p style="color: var(--text-muted); font-size: 0.88rem; margin: 0;">
+            Active announcements display as a prominent banner at the top of the student dashboard.
+          </p>
+          <button id="btnOpenAddAnnouncementModal" class="btn btn-primary btn-sm">+ Post Announcement</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Message</th>
+                <th>Status</th>
+                <th>Created Date</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="announcementsTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer" style="margin-top: 4rem; border-top: 1px solid var(--border-subtle); padding-top: 2rem;">
+      <div class="container footer-inner">
+        <div class="brand">
+          <div class="brand-icon">⚡</div>
+          <span>Skill<span class="brand-accent">Path</span></span>
+        </div>
+        <p class="footer-copy">
+          SkillPath: IT Career Roadmap Tracker · Administrative Control Center · <a href="privacy.html" style="color: var(--text-muted); text-decoration: underline;">Privacy Policy</a>
+        </p>
+      </div>
+    </footer>
   </main>
 
-  <!-- Modal: Add / Edit Global Domain -->
+  <!-- ========================================================================= -->
+  <!-- MODALS -->
+  <!-- ========================================================================= -->
+
+  <!-- Modal: Domain (Add / Edit) -->
   <div id="modalDomain" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalDomainTitle">
     <div class="modal-card">
       <div class="modal-header">
         <h3 id="modalDomainTitle" class="modal-title">Create Global IT Domain</h3>
-        <button type="button" class="modal-close" onclick="closeModal('modalDomain')" aria-label="Close modal">✕</button>
+        <button type="button" class="modal-close" onclick="closeAdminModal('modalDomain')" aria-label="Close modal">✕</button>
       </div>
 
       <form id="formDomain" novalidate>
         <input type="hidden" id="domainEditId">
 
-        <div class="form-group">
-          <label for="domainTitle" class="form-label">Domain Title <span class="req">*</span></label>
-          <input
-            type="text"
-            id="domainTitle"
-            class="form-control"
-            placeholder="e.g. AI Engineering, Cloud Architecture"
-            required
-          >
-          <div class="field-error" id="domainTitleError"></div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="domainTitle" class="form-label">Domain Title <span class="req">*</span></label>
+            <input type="text" id="domainTitle" class="form-control" placeholder="e.g. Cloud Architecture & Kubernetes" required>
+          </div>
+
+          <div class="form-group">
+            <label for="domainDescription" class="form-label">Description</label>
+            <textarea id="domainDescription" class="form-control" rows="3" placeholder="Brief roadmap summary for students..."></textarea>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="domainIcon" class="form-label">Emoji Icon</label>
+              <input type="text" id="domainIcon" class="form-control" value="🎯" maxlength="4">
+            </div>
+
+            <div class="form-group">
+              <label for="domainColor" class="form-label">Accent Color</label>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input type="color" id="domainColor" value="#6366f1" style="width: 44px; height: 38px; border: none; border-radius: var(--radius-sm); cursor: pointer; background: transparent;">
+                <input type="text" id="domainColorHex" class="form-control" value="#6366f1">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem;">
+            <div>
+              <label for="domainIsVisible" class="form-label" style="margin-bottom: 0;">Visible to Students</label>
+              <p style="font-size: 0.78rem; color: var(--text-dim); margin: 0;">When disabled, this roadmap is hidden from non-admin users.</p>
+            </div>
+            <label class="switch-control">
+              <input type="checkbox" id="domainIsVisible" checked>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
         </div>
 
-        <div class="form-group">
-          <label for="domainIcon" class="form-label">Emoji Icon <span class="req">*</span></label>
-          <input
-            type="text"
-            id="domainIcon"
-            class="form-control"
-            placeholder="🤖, 💻, 🛡️, 🚀, 📊"
-            value="🎯"
-            maxlength="4"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label for="domainDesc" class="form-label">Description</label>
-          <textarea
-            id="domainDesc"
-            class="form-control"
-            rows="3"
-            placeholder="Brief overview of what students will master in this curriculum track..."
-          ></textarea>
-        </div>
-
-        <div class="modal-actions">
-          <button type="button" class="btn btn-outline" onclick="closeModal('modalDomain')">Cancel</button>
-          <button type="submit" id="btnSaveDomain" class="btn btn-primary">Save Global Domain</button>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeAdminModal('modalDomain')">Cancel</button>
+          <button type="submit" id="btnSaveDomain" class="btn btn-primary">Save Domain</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Modal: Add / Edit Task -->
+  <!-- Modal: Task (Add / Edit) -->
   <div id="modalTask" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTaskTitle">
     <div class="modal-card">
       <div class="modal-header">
         <h3 id="modalTaskTitle" class="modal-title">Add Curriculum Task</h3>
-        <button type="button" class="modal-close" onclick="closeModal('modalTask')" aria-label="Close modal">✕</button>
+        <button type="button" class="modal-close" onclick="closeAdminModal('modalTask')" aria-label="Close modal">✕</button>
       </div>
 
       <form id="formTask" novalidate>
         <input type="hidden" id="taskEditId">
 
-        <div class="form-group">
-          <label for="taskTitle" class="form-label">Task Title <span class="req">*</span></label>
-          <input
-            type="text"
-            id="taskTitle"
-            class="form-control"
-            placeholder="e.g. Deep Learning Foundations with PyTorch"
-            required
-          >
-          <div class="field-error" id="taskTitleError"></div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="taskDomainId" class="form-label">Target Domain <span class="req">*</span></label>
+            <select id="taskDomainId" class="form-control" required></select>
+          </div>
+
+          <div class="form-group">
+            <label for="taskTitle" class="form-label">Task Title <span class="req">*</span></label>
+            <input type="text" id="taskTitle" class="form-control" placeholder="e.g. Asynchronous JavaScript & Promises" required>
+          </div>
+
+          <div class="form-group">
+            <label for="taskDescription" class="form-label">Description & Syllabus</label>
+            <textarea id="taskDescription" class="form-control" rows="3" placeholder="Learning objectives, key concepts, or mini-project instructions..."></textarea>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="taskLevel" class="form-label">Proficiency Level</label>
+              <select id="taskLevel" class="form-control">
+                <option value="Beginner">Beginner</option>
+                <option value="Intermediate">Intermediate</option>
+                <option value="Advanced">Advanced</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="taskEstimatedHours" class="form-label">Estimated Hours</label>
+              <input type="number" id="taskEstimatedHours" class="form-control" value="10" min="1" max="500">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="taskResourceUrl" class="form-label">Documentation / Tutorial URL</label>
+            <input type="url" id="taskResourceUrl" class="form-control" placeholder="https://developer.mozilla.org/...">
+          </div>
         </div>
 
-        <div class="form-group">
-          <label for="taskDesc" class="form-label">Description / Guidelines</label>
-          <textarea
-            id="taskDesc"
-            class="form-control"
-            rows="3"
-            placeholder="Explain the concepts, exercises, or prerequisites students should cover..."
-          ></textarea>
-        </div>
-
-        <div class="form-group">
-          <label for="taskUrl" class="form-label">Optional Resource Link</label>
-          <input
-            type="url"
-            id="taskUrl"
-            class="form-control"
-            placeholder="https://pytorch.org/tutorials/ or documentation link"
-          >
-          <div class="field-error" id="taskUrlError"></div>
-        </div>
-
-        <div class="modal-actions">
-          <button type="button" class="btn btn-outline" onclick="closeModal('modalTask')">Cancel</button>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeAdminModal('modalTask')">Cancel</button>
           <button type="submit" id="btnSaveTask" class="btn btn-primary">Save Task</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Modal: Delete Confirmation Dialog -->
-  <div id="modalConfirmDelete" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle">
+  <!-- Modal: Planner Template (Add / Edit) -->
+  <div id="modalPlannerTemplate" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTemplateTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalTemplateTitle" class="modal-title">Create Planner Template</h3>
+        <button type="button" class="modal-close" onclick="closeAdminModal('modalPlannerTemplate')" aria-label="Close modal">✕</button>
+      </div>
+
+      <form id="formPlannerTemplate" novalidate>
+        <input type="hidden" id="templateEditId">
+
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="templateTitle" class="form-label">Template Title <span class="req">*</span></label>
+            <input type="text" id="templateTitle" class="form-control" placeholder="e.g. 12-Week AI Engineering Intensive" required>
+          </div>
+
+          <div class="form-group">
+            <label for="templateDescription" class="form-label">Description</label>
+            <textarea id="templateDescription" class="form-control" rows="3" placeholder="Target audience and recommended weekly study commitment..."></textarea>
+          </div>
+
+          <div class="form-group" style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <label for="templateIsDefault" class="form-label" style="margin-bottom: 0;">Set as Default Plan</label>
+              <p style="font-size: 0.78rem; color: var(--text-dim); margin: 0;">This template will be the official plan loaded by default for all students.</p>
+            </div>
+            <label class="switch-control">
+              <input type="checkbox" id="templateIsDefault">
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeAdminModal('modalPlannerTemplate')">Cancel</button>
+          <button type="submit" id="btnSaveTemplate" class="btn btn-primary">Save Template</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Planner Slot (Add / Edit) -->
+  <div id="modalPlannerSlot" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalSlotTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalSlotTitle" class="modal-title">Add Study Slot</h3>
+        <button type="button" class="modal-close" onclick="closeAdminModal('modalPlannerSlot')" aria-label="Close modal">✕</button>
+      </div>
+
+      <form id="formPlannerSlot" novalidate>
+        <input type="hidden" id="slotEditId">
+
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="slotDayOfWeek" class="form-label">Day of Week <span class="req">*</span></label>
+            <select id="slotDayOfWeek" class="form-control" required>
+              <option value="0">Monday</option>
+              <option value="1">Tuesday</option>
+              <option value="2">Wednesday</option>
+              <option value="3">Thursday</option>
+              <option value="4">Friday</option>
+              <option value="5">Saturday</option>
+              <option value="6">Sunday</option>
+            </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="slotStartTime" class="form-label">Start Time</label>
+              <input type="time" id="slotStartTime" class="form-control" value="09:00">
+            </div>
+
+            <div class="form-group">
+              <label for="slotEndTime" class="form-label">End Time</label>
+              <input type="time" id="slotEndTime" class="form-control" value="11:00">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="slotTitle" class="form-label">Slot Title / Goal <span class="req">*</span></label>
+            <input type="text" id="slotTitle" class="form-control" placeholder="e.g. Deep Learning Backpropagation & Gradient Descent" required>
+          </div>
+
+          <div class="form-group">
+            <label for="slotDomainId" class="form-label">Linked Domain (Optional)</label>
+            <select id="slotDomainId" class="form-control">
+              <option value="">None (General Study)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="slotNotes" class="form-label">Notes & Instructions</label>
+            <textarea id="slotNotes" class="form-control" rows="2" placeholder="Specific reading, exercises, or repo links..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeAdminModal('modalPlannerSlot')">Cancel</button>
+          <button type="submit" id="btnSaveSlot" class="btn btn-primary">Save Slot</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Resource (Add / Edit) -->
+  <div id="modalResource" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalResourceTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalResourceTitle" class="modal-title">Add Global Resource</h3>
+        <button type="button" class="modal-close" onclick="closeAdminModal('modalResource')" aria-label="Close modal">✕</button>
+      </div>
+
+      <form id="formResource" novalidate>
+        <input type="hidden" id="resourceEditId">
+
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="resourceTitle" class="form-label">Resource Title <span class="req">*</span></label>
+            <input type="text" id="resourceTitle" class="form-control" placeholder="e.g. MDN Web Docs - JavaScript Guide" required>
+          </div>
+
+          <div class="form-group">
+            <label for="resourceUrl" class="form-label">Destination URL <span class="req">*</span></label>
+            <input type="url" id="resourceUrl" class="form-control" placeholder="https://..." required>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="resourceCategory" class="form-label">Category</label>
+              <select id="resourceCategory" class="form-control">
+                <option value="Documentation">Documentation</option>
+                <option value="Tutorial">Tutorial</option>
+                <option value="Course">Course</option>
+                <option value="Security Guide">Security Guide</option>
+                <option value="General">General</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="resourceDomainId" class="form-label">Linked Domain</label>
+              <select id="resourceDomainId" class="form-control">
+                <option value="">General</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="resourceNotes" class="form-label">Notes & Summary</label>
+            <textarea id="resourceNotes" class="form-control" rows="2" placeholder="Why this resource is valuable for students..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeAdminModal('modalResource')">Cancel</button>
+          <button type="submit" id="btnSaveResource" class="btn btn-primary">Save Resource</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Announcement (Add / Edit) -->
+  <div id="modalAnnouncement" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalAnnouncementTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalAnnouncementTitle" class="modal-title">Post Dashboard Announcement</h3>
+        <button type="button" class="modal-close" onclick="closeAdminModal('modalAnnouncement')" aria-label="Close modal">✕</button>
+      </div>
+
+      <form id="formAnnouncement" novalidate>
+        <input type="hidden" id="announcementEditId">
+
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="announcementMessage" class="form-label">Announcement Message <span class="req">*</span></label>
+            <textarea id="announcementMessage" class="form-control" rows="3" placeholder="e.g. 📢 New AI Engineering roadmap modules released! Check them out." required></textarea>
+          </div>
+
+          <div class="form-group" style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <label for="announcementIsActive" class="form-label" style="margin-bottom: 0;">Active Banner</label>
+              <p style="font-size: 0.78rem; color: var(--text-dim); margin: 0;">When enabled, this announcement shows on the student dashboard.</p>
+            </div>
+            <label class="switch-control">
+              <input type="checkbox" id="announcementIsActive" checked>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeAdminModal('modalAnnouncement')">Cancel</button>
+          <button type="submit" id="btnSaveAnnouncement" class="btn btn-primary">Publish Announcement</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: View User Progress -->
+  <div id="modalUserProgress" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalUserProgressTitle">
+    <div class="modal-card" style="max-width: 650px;">
+      <div class="modal-header">
+        <div>
+          <h3 id="modalUserProgressTitle" class="modal-title">Student Learning Progress</h3>
+          <p id="modalUserProgressSubtitle" style="color: var(--text-muted); font-size: 0.85rem; margin: 0.25rem 0 0 0;"></p>
+        </div>
+        <button type="button" class="modal-close" onclick="closeAdminModal('modalUserProgress')" aria-label="Close modal">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div id="userProgressDetailsList" style="display: flex; flex-direction: column; gap: 1rem;">
+          <p style="color: var(--text-dim);">Loading progress...</p>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="closeAdminModal('modalUserProgress')">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Generic Confirmation Dialog -->
+  <div id="modalConfirm" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalConfirmTitle">
     <div class="modal-card" style="max-width: 440px;">
       <div class="modal-header">
-        <h3 id="confirmDeleteTitle" class="modal-title" style="color: #fb7185;">Confirm Deletion</h3>
-        <button type="button" class="modal-close" onclick="closeModal('modalConfirmDelete')">✕</button>
+        <h3 id="modalConfirmTitle" class="modal-title">Confirm Action</h3>
+        <button type="button" class="modal-close" onclick="closeAdminModal('modalConfirm')" aria-label="Close modal">✕</button>
       </div>
-      <div style="padding: 1rem 0;">
-        <p id="confirmDeleteMessage" style="color: var(--text-muted); line-height: 1.5;">
-          Are you sure you want to delete this item? This action cannot be undone.
-        </p>
+
+      <div class="modal-body">
+        <p id="modalConfirmMessage" style="color: var(--text-muted); font-size: 0.95rem; margin: 0; line-height: 1.5;"></p>
       </div>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-outline" onclick="closeModal('modalConfirmDelete')">Cancel</button>
-        <button type="button" id="btnConfirmDeleteAction" class="btn btn-danger">Yes, Delete</button>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeAdminModal('modalConfirm')">Cancel</button>
+        <button type="button" id="btnConfirmAction" class="btn btn-danger">Confirm</button>
       </div>
     </div>
   </div>
 
   <!-- Toast Notification Container -->
-  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+  <div id="toastContainer" aria-live="polite"></div>
 
-  <!-- Admin Controller Script -->
-  <script>
-    let globalDomains = [];
-    let currentDomain = null;
-    let currentTasks = [];
-    let allProgress = [];
-    let pendingDeleteCallback = null;
-
-    document.addEventListener('DOMContentLoaded', async () => {
-      // 1. Enforce admin route protection
-      const adminUser = await SkillPathAuth.requireAdmin();
-      if (!adminUser) return;
-
-      // 2. Setup buttons
-      document.getElementById('btnTopAddDomain').onclick = () => openDomainModal();
-      document.getElementById('btnOpenNewDomainModal').onclick = () => openDomainModal();
-      document.getElementById('btnOpenAddTaskModal').onclick = () => openTaskModal();
-      document.getElementById('btnEditCurrentDomain').onclick = () => {
-        if (currentDomain) openDomainModal(currentDomain);
-      };
-      document.getElementById('btnDeleteCurrentDomain').onclick = () => {
-        if (currentDomain) {
-          confirmAction(
-            `Are you sure you want to delete the "${currentDomain.title}" global domain? All associated tasks will be permanently removed.`,
-            async () => {
-              await deleteDomain(currentDomain.id);
-            }
-          );
-        }
-      };
-
-      document.getElementById('formDomain').onsubmit = handleDomainSubmit;
-      document.getElementById('formTask').onsubmit = handleTaskSubmit;
-      document.getElementById('btnConfirmDeleteAction').onclick = async () => {
-        if (pendingDeleteCallback) {
-          const cb = pendingDeleteCallback;
-          pendingDeleteCallback = null;
-          closeModal('modalConfirmDelete');
-          await cb();
-        }
-      };
-
-      // 3. Load admin statistics & data
-      await loadAdminDashboard();
-    });
-
-    /**
-     * Load overall platform statistics and global domains
-     */
-    async function loadAdminDashboard() {
-      const client = SkillPathAuth.getClient();
-      if (!client) return;
-
-      showDomainsLoading(true);
-
-      try {
-        // Fetch profiles count
-        const { count: usersCount, error: usrErr } = await client
-          .from('profiles')
-          .select('id', { count: 'exact', head: true });
-
-        document.getElementById('statAdminUsers').textContent = usrErr ? '—' : (usersCount || 0);
-
-        // Fetch global domains
-        const { data: domains, error: domErr } = await client
-          .from('domains')
-          .select('*')
-          .eq('is_global', true)
-          .order('created_at', { ascending: true });
-
-        if (domErr) throw domErr;
-        globalDomains = domains || [];
-
-        // Fetch all tasks under global domains
-        const domainIds = globalDomains.map(d => d.id);
-        let tasks = [];
-        if (domainIds.length > 0) {
-          const { data: allTasksData, error: tskErr } = await client
-            .from('tasks')
-            .select('*')
-            .in('domain_id', domainIds)
-            .order('position', { ascending: true });
-          if (!tskErr && allTasksData) {
-            tasks = allTasksData;
-          }
-        }
-
-        // Fetch all user progress
-        const { data: progressData, error: prgErr } = await client
-          .from('user_progress')
-          .select('*');
-
-        allProgress = (!prgErr && progressData) ? progressData : [];
-
-        // Compute overall metrics
-        document.getElementById('statAdminDomains').textContent = globalDomains.length;
-        document.getElementById('statAdminTasks').textContent = tasks.length;
-
-        // Compute average completion
-        let avgCompletion = 0;
-        if (tasks.length > 0 && usersCount > 0) {
-          const completedCount = allProgress.filter(p => p.completed).length;
-          const totalPossible = tasks.length * Math.max(usersCount, 1);
-          avgCompletion = Math.min(100, Math.round((completedCount / totalPossible) * 100));
-        }
-        document.getElementById('statAdminAvgCompletion').textContent = `${avgCompletion}%`;
-
-        // Render domains
-        showDomainsLoading(false);
-        renderDomainList();
-
-        // Auto-select first domain if none selected
-        if (globalDomains.length > 0) {
-          const target = currentDomain ? globalDomains.find(d => d.id === currentDomain.id) : globalDomains[0];
-          selectDomain(target || globalDomains[0]);
-        } else {
-          resetTaskPanel();
-        }
-      } catch (err) {
-        showDomainsLoading(false);
-        const errBox = document.getElementById('domainsError');
-        errBox.textContent = 'Failed to load domains: ' + (err.message || 'Unknown database error');
-        errBox.style.display = 'block';
-      }
-    }
-
-    /**
-     * Render global domains list in sidebar
-     */
-    function renderDomainList() {
-      const list = document.getElementById('adminDomainList');
-      const emptyState = document.getElementById('domainsEmpty');
-      const badge = document.getElementById('domainCountBadge');
-
-      badge.textContent = `${globalDomains.length} Roadmaps`;
-
-      if (globalDomains.length === 0) {
-        list.innerHTML = '';
-        emptyState.style.display = 'block';
-        return;
-      }
-
-      emptyState.style.display = 'none';
-      list.innerHTML = globalDomains.map(domain => {
-        const isActive = currentDomain && currentDomain.id === domain.id;
-        return `
-          <div
-            class="admin-domain-tab ${isActive ? 'active' : ''}"
-            onclick="selectDomainById('${domain.id}')"
-            role="button"
-            tabindex="0"
-          >
-            <div style="display: flex; align-items: center; gap: 0.75rem; overflow: hidden;">
-              <span style="font-size: 1.5rem; flex-shrink: 0;">${escapeHtml(domain.icon || '🎯')}</span>
-              <div style="overflow: hidden;">
-                <div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                  ${escapeHtml(domain.title)}
-                </div>
-                <div style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                  ${escapeHtml(domain.description || 'No description')}
-                </div>
-              </div>
-            </div>
-            <span class="roadmap-badge badge-global" style="flex-shrink: 0; font-size: 0.7rem;">Official</span>
-          </div>
-        `;
-      }).join('');
-    }
-
-    function selectDomainById(domainId) {
-      const found = globalDomains.find(d => d.id === domainId);
-      if (found) selectDomain(found);
-    }
-
-    /**
-     * Select domain and load its tasks
-     */
-    async function selectDomain(domain) {
-      currentDomain = domain;
-      renderDomainList();
-
-      document.getElementById('selectedDomainIcon').textContent = domain.icon || '🎯';
-      document.getElementById('selectedDomainTitle').textContent = domain.title;
-      document.getElementById('selectedDomainDesc').textContent = domain.description || 'Global roadmap milestone curriculum.';
-      document.getElementById('taskHeaderActions').style.display = 'flex';
-
-      await loadTasksForDomain(domain.id);
-    }
-
-    function resetTaskPanel() {
-      currentDomain = null;
-      document.getElementById('selectedDomainIcon').textContent = '🎯';
-      document.getElementById('selectedDomainTitle').textContent = 'No Domain Selected';
-      document.getElementById('selectedDomainDesc').textContent = 'Select a domain on the left to view and reorder its curriculum tasks.';
-      document.getElementById('selectedDomainCompletion').textContent = '';
-      document.getElementById('taskHeaderActions').style.display = 'none';
-      document.getElementById('adminTaskList').innerHTML = '';
-      document.getElementById('tasksEmpty').style.display = 'none';
-    }
-
-    /**
-     * Load tasks for a domain
-     */
-    async function loadTasksForDomain(domainId) {
-      const client = SkillPathAuth.getClient();
-      if (!client) return;
-
-      const loadingBox = document.getElementById('tasksLoading');
-      const errBox = document.getElementById('tasksError');
-      const emptyBox = document.getElementById('tasksEmpty');
-      const list = document.getElementById('adminTaskList');
-
-      loadingBox.style.display = 'block';
-      errBox.style.display = 'none';
-      emptyBox.style.display = 'none';
-      list.innerHTML = '';
-
-      try {
-        const { data: tasks, error } = await client
-          .from('tasks')
-          .select('*')
-          .eq('domain_id', domainId)
-          .order('position', { ascending: true });
-
-        loadingBox.style.display = 'none';
-
-        if (error) throw error;
-        currentTasks = tasks || [];
-
-        // Calculate domain-level student completion
-        if (currentTasks.length > 0) {
-          const taskIds = currentTasks.map(t => t.id);
-          const domainCompletedProgress = allProgress.filter(p => taskIds.includes(p.task_id) && p.completed);
-          document.getElementById('selectedDomainCompletion').textContent = 
-            `📊 ${currentTasks.length} Milestones · ${domainCompletedProgress.length} Total Student Completions`;
-        } else {
-          document.getElementById('selectedDomainCompletion').textContent = '0 Milestones added';
-        }
-
-        renderTasks();
-      } catch (err) {
-        loadingBox.style.display = 'none';
-        errBox.textContent = 'Failed to load tasks: ' + (err.message || 'Unknown error');
-        errBox.style.display = 'block';
-      }
-    }
-
-    /**
-     * Render tasks under the selected domain
-     */
-    function renderTasks() {
-      const list = document.getElementById('adminTaskList');
-      const emptyBox = document.getElementById('tasksEmpty');
-
-      if (currentTasks.length === 0) {
-        list.innerHTML = '';
-        emptyBox.style.display = 'block';
-        return;
-      }
-
-      emptyBox.style.display = 'none';
-      list.innerHTML = currentTasks.map((task, index) => {
-        const isFirst = index === 0;
-        const isLast = index === currentTasks.length - 1;
-
-        return `
-          <div class="admin-task-card" data-task-id="${task.id}">
-            <!-- Reorder Controls -->
-            <div class="task-reorder-controls">
-              <button
-                class="btn-icon-sm"
-                title="Move Up"
-                onclick="reorderTask('${task.id}', 'up')"
-                ${isFirst ? 'disabled' : ''}
-              >▲</button>
-              <button
-                class="btn-icon-sm"
-                title="Move Down"
-                onclick="reorderTask('${task.id}', 'down')"
-                ${isLast ? 'disabled' : ''}
-              >▼</button>
-            </div>
-
-            <!-- Task Info -->
-            <div class="admin-task-info">
-              <div class="admin-task-title">
-                <span style="color: var(--primary-light); margin-right: 0.35rem; font-size: 0.85rem;">#${index + 1}</span>
-                ${escapeHtml(task.title)}
-              </div>
-              ${task.description ? `<p class="admin-task-desc">${escapeHtml(task.description)}</p>` : ''}
-              ${task.resource_url ? `
-                <a href="${escapeHtml(task.resource_url)}" target="_blank" rel="noopener noreferrer" class="admin-task-link">
-                  🔗 Resource Link ↗
-                </a>
-              ` : ''}
-            </div>
-
-            <!-- Task Actions -->
-            <div style="display: flex; gap: 0.4rem; flex-shrink: 0;">
-              <button class="btn btn-secondary btn-sm" onclick="openTaskModalById('${task.id}')" title="Edit Task">✏️</button>
-              <button class="btn btn-danger btn-sm" onclick="confirmDeleteTask('${task.id}')" title="Delete Task">🗑️</button>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    /**
-     * Reorder task position (Up/Down)
-     */
-    async function reorderTask(taskId, direction) {
-      const index = currentTasks.findIndex(t => t.id === taskId);
-      if (index === -1) return;
-
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= currentTasks.length) return;
-
-      // Swap positions in memory
-      const taskA = currentTasks[index];
-      const taskB = currentTasks[targetIndex];
-
-      const tempPos = taskA.position;
-      taskA.position = taskB.position;
-      taskB.position = tempPos;
-
-      currentTasks[index] = taskB;
-      currentTasks[targetIndex] = taskA;
-
-      renderTasks();
-
-      // Persist to database
-      const client = SkillPathAuth.getClient();
-      if (!client) return;
-
-      try {
-        await Promise.all([
-          client.from('tasks').update({ position: taskA.position }).eq('id', taskA.id),
-          client.from('tasks').update({ position: taskB.position }).eq('id', taskB.id)
-        ]);
-        showToast('Task order updated', 'success');
-      } catch (err) {
-        showToast('Failed to save task order', 'error');
-        if (currentDomain) await loadTasksForDomain(currentDomain.id);
-      }
-    }
-
-    /**
-     * Domain Modal Handlers
-     */
-    function openDomainModal(domainToEdit = null) {
-      document.getElementById('domainEditId').value = domainToEdit ? domainToEdit.id : '';
-      document.getElementById('domainTitle').value = domainToEdit ? domainToEdit.title : '';
-      document.getElementById('domainIcon').value = domainToEdit ? domainToEdit.icon : '🎯';
-      document.getElementById('domainDesc').value = domainToEdit ? (domainToEdit.description || '') : '';
-      document.getElementById('modalDomainTitle').textContent = domainToEdit ? 'Edit Global IT Domain' : 'Create Global IT Domain';
-      document.getElementById('domainTitleError').textContent = '';
-      openModal('modalDomain');
-    }
-
-    async function handleDomainSubmit(e) {
-      e.preventDefault();
-      const id = document.getElementById('domainEditId').value;
-      const title = document.getElementById('domainTitle').value.trim();
-      const icon = document.getElementById('domainIcon').value.trim() || '🎯';
-      const description = document.getElementById('domainDesc').value.trim();
-
-      if (!title) {
-        document.getElementById('domainTitleError').textContent = 'Please enter a domain title.';
-        return;
-      }
-
-      const client = SkillPathAuth.getClient();
-      if (!client) return;
-
-      const saveBtn = document.getElementById('btnSaveDomain');
-      saveBtn.disabled = true;
-
-      try {
-        if (id) {
-          // Update
-          const { error } = await client
-            .from('domains')
-            .update({ title, icon, description })
-            .eq('id', id);
-
-          if (error) throw error;
-          showToast('Domain updated successfully', 'success');
-        } else {
-          // Insert
-          const user = await SkillPathAuth.getUser();
-          const { data, error } = await client
-            .from('domains')
-            .insert({
-              title,
-              icon,
-              description,
-              is_global: true,
-              created_by: user.id
-            })
-            .select()
-            .single();
-
-          if (error) throw error;
-          currentDomain = data;
-          showToast('Global domain created', 'success');
-        }
-
-        closeModal('modalDomain');
-        await loadAdminDashboard();
-      } catch (err) {
-        showToast('Error saving domain: ' + err.message, 'error');
-      } finally {
-        saveBtn.disabled = false;
-      }
-    }
-
-    async function deleteDomain(domainId) {
-      const client = SkillPathAuth.getClient();
-      if (!client) return;
-
-      try {
-        const { error } = await client
-          .from('domains')
-          .delete()
-          .eq('id', domainId);
-
-        if (error) throw error;
-        showToast('Domain deleted', 'success');
-        currentDomain = null;
-        await loadAdminDashboard();
-      } catch (err) {
-        showToast('Failed to delete domain: ' + err.message, 'error');
-      }
-    }
-
-    /**
-     * Task Modal Handlers
-     */
-    function openTaskModal(taskToEdit = null) {
-      if (!currentDomain) {
-        showToast('Please select a domain first', 'error');
-        return;
-      }
-
-      document.getElementById('taskEditId').value = taskToEdit ? taskToEdit.id : '';
-      document.getElementById('taskTitle').value = taskToEdit ? taskToEdit.title : '';
-      document.getElementById('taskDesc').value = taskToEdit ? (taskToEdit.description || '') : '';
-      document.getElementById('taskUrl').value = taskToEdit ? (taskToEdit.resource_url || '') : '';
-      document.getElementById('modalTaskTitle').textContent = taskToEdit ? 'Edit Curriculum Task' : `Add Task to ${currentDomain.title}`;
-      document.getElementById('taskTitleError').textContent = '';
-      openModal('modalTask');
-    }
-
-    function openTaskModalById(taskId) {
-      const task = currentTasks.find(t => t.id === taskId);
-      if (task) openTaskModal(task);
-    }
-
-    async function handleTaskSubmit(e) {
-      e.preventDefault();
-      if (!currentDomain) return;
-
-      const id = document.getElementById('taskEditId').value;
-      const title = document.getElementById('taskTitle').value.trim();
-      const description = document.getElementById('taskDesc').value.trim();
-      const resource_url = document.getElementById('taskUrl').value.trim();
-
-      if (!title) {
-        document.getElementById('taskTitleError').textContent = 'Please enter a task title.';
-        return;
-      }
-
-      const client = SkillPathAuth.getClient();
-      if (!client) return;
-
-      const saveBtn = document.getElementById('btnSaveTask');
-      saveBtn.disabled = true;
-
-      try {
-        if (id) {
-          // Update
-          const { error } = await client
-            .from('tasks')
-            .update({ title, description, resource_url })
-            .eq('id', id);
-
-          if (error) throw error;
-          showToast('Task updated', 'success');
-        } else {
-          // Insert with position at end
-          const nextPosition = currentTasks.length > 0 ? Math.max(...currentTasks.map(t => t.position)) + 1 : 1;
-          const { error } = await client
-            .from('tasks')
-            .insert({
-              domain_id: currentDomain.id,
-              title,
-              description,
-              resource_url,
-              position: nextPosition
-            });
-
-          if (error) throw error;
-          showToast('Task added to curriculum', 'success');
-        }
-
-        closeModal('modalTask');
-        await loadTasksForDomain(currentDomain.id);
-        // Refresh total stats
-        const { count: taskCount } = await client.from('tasks').select('id', { count: 'exact', head: true });
-        if (taskCount !== null) document.getElementById('statAdminTasks').textContent = taskCount;
-      } catch (err) {
-        showToast('Error saving task: ' + err.message, 'error');
-      } finally {
-        saveBtn.disabled = false;
-      }
-    }
-
-    function confirmDeleteTask(taskId) {
-      const task = currentTasks.find(t => t.id === taskId);
-      if (!task) return;
-
-      confirmAction(
-        `Are you sure you want to delete the task "${task.title}"?`,
-        async () => {
-          const client = SkillPathAuth.getClient();
-          if (!client) return;
-
-          try {
-            const { error } = await client.from('tasks').delete().eq('id', taskId);
-            if (error) throw error;
-            showToast('Task deleted', 'success');
-            if (currentDomain) await loadTasksForDomain(currentDomain.id);
-          } catch (err) {
-            showToast('Failed to delete task: ' + err.message, 'error');
-          }
-        }
-      );
-    }
-
-    /**
-     * Generic Confirm Dialog
-     */
-    function confirmAction(message, callback) {
-      document.getElementById('confirmDeleteMessage').textContent = message;
-      pendingDeleteCallback = callback;
-      openModal('modalConfirmDelete');
-    }
-
-    /**
-     * UI Helpers
-     */
-    function showDomainsLoading(isLoading) {
-      document.getElementById('domainsLoading').style.display = isLoading ? 'block' : 'none';
-      document.getElementById('domainsError').style.display = 'none';
-    }
-
-    function openModal(modalId) {
-      const modal = document.getElementById(modalId);
-      if (modal) modal.classList.add('open');
-    }
-
-    function closeModal(modalId) {
-      const modal = document.getElementById(modalId);
-      if (modal) modal.classList.remove('open');
-    }
-
-    function showToast(message, type = 'info') {
-      const container = document.getElementById('toastContainer');
-      if (!container) return;
-
-      const toast = document.createElement('div');
-      toast.className = `toast toast-${type}`;
-      toast.innerHTML = `
-        <span class="toast-icon">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
-        <span class="toast-message">${escapeHtml(message)}</span>
-      `;
-      container.appendChild(toast);
-
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(100%)';
-        setTimeout(() => toast.remove(), 250);
-      }, 3500);
-    }
-
-    // Close modals on escape key
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        document.querySelectorAll('.modal-backdrop.open').forEach(m => m.classList.remove('open'));
-      }
-    });
-
-    // Mobile nav toggle
-    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
-    const navLinks = document.getElementById('navLinks');
-    if (mobileMenuToggle && navLinks) {
-      mobileMenuToggle.addEventListener('click', () => {
-        navLinks.classList.toggle('open');
-      });
-    }
-  </script>
+  <!-- Admin JavaScript Engine -->
+  <script src="admin.js"></script>
 </body>
 </html>

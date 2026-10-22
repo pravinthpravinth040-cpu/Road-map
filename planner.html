@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SkillPath - Weekly Study Planner & Skills Inventory</title>
-  <meta name="description" content="Plan your daily IT study schedule and log your technical proficiency matrix.">
+  <title>Weekly Study Planner - SkillPath</title>
+  <meta name="description" content="Follow the official curriculum weekly study schedule and organize your personal IT learning goals.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <!-- Supabase CDN (Pinned Version) & Config -->
+
+  <!-- Supabase CDN & Config -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
   <script src="config.js"></script>
   <script src="auth.js"></script>
@@ -34,9 +35,6 @@
 
       <div class="nav-actions">
         <div id="navAuthContainer"></div>
-        <button id="btnExportData" class="btn btn-outline btn-sm">💾 Export</button>
-        <button id="btnImportData" class="btn btn-outline btn-sm">📥 Import</button>
-        <input type="file" id="importFileInput" accept=".json" style="display: none;" aria-hidden="true">
         <a href="index.html" class="btn btn-primary btn-sm">My Roadmaps</a>
         <button id="mobileMenuToggle" class="mobile-toggle" aria-label="Toggle Navigation Menu">☰</button>
       </div>
@@ -44,40 +42,55 @@
   </header>
 
   <!-- Main Content Area -->
-  <main class="container">
+  <main class="container" style="padding-top: 2rem; padding-bottom: 5rem;">
 
-    <!-- Section 1: Weekly Study Planner -->
-    <section style="padding: 2.5rem 0 1rem;" aria-labelledby="plannerHeading">
-      <div class="section-header">
+    <!-- Planner Hero & Weekly Completion Header -->
+    <section class="admin-header-card" style="margin-bottom: 2rem;">
+      <div class="admin-title-row">
         <div>
-          <h1 id="plannerHeading" style="font-size: 2.1rem; margin-bottom: 0.3rem;">Weekly Study Planner</h1>
-          <p>Organize your daily study sessions, revisions, and coding goals from Monday to Sunday.</p>
+          <span class="roadmap-badge badge-global" id="plannerTemplateBadge">🛡️ Official Curriculum Study Schedule</span>
+          <h1 id="plannerTitleHeading" style="font-size: 2rem; margin-top: 0.5rem; margin-bottom: 0.25rem;">Weekly Study Planner</h1>
+          <p id="plannerSubtitle" class="hero-subtitle" style="margin-bottom: 0;">
+            Follow official faculty-curated study slots, log personal study sessions, and track your weekly completion rate.
+          </p>
         </div>
-        <button id="btnClearPlanner" class="btn btn-outline btn-sm">🔄 Reset Week</button>
+        <div style="text-align: right;">
+          <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.25rem;">Weekly Completion</div>
+          <div id="weeklyCompletionPct" style="font-size: 1.75rem; font-weight: 800; color: #34d399;">0%</div>
+        </div>
       </div>
 
-      <!-- 7-Day Grid -->
-      <div id="plannerGrid" class="planner-grid"></div>
+      <!-- Weekly Progress Bar -->
+      <div class="progress-bar-track" style="height: 8px; margin-top: 1.25rem;">
+        <div id="weeklyProgressBarFill" class="progress-bar-fill" style="width: 0%; background: linear-gradient(90deg, #6366f1, #10b981);"></div>
+      </div>
+    </section>
+
+    <!-- Section 1: Weekly Study Grid (Mon-Sun) -->
+    <section aria-labelledby="gridSectionTitle">
+      <div class="section-header" style="margin-bottom: 1.25rem;">
+        <div>
+          <h2 id="gridSectionTitle" class="section-title">Weekly Schedule (Monday – Sunday)</h2>
+          <p>Check off completed slots as you study. Official faculty slots are marked with 🛡️ and personal entries with 👤.</p>
+        </div>
+      </div>
+
+      <!-- 7-Day Grid Container -->
+      <div id="studentPlannerGrid" class="planner-grid">
+        <!-- Monday to Sunday columns -->
+      </div>
     </section>
 
     <!-- Section 2: Technical Skills Matrix -->
-    <section style="padding: 1rem 0 3rem;" aria-labelledby="skillsHeading">
+    <section style="margin-top: 4rem;" aria-labelledby="skillsHeading">
       <div class="section-header">
         <div>
           <h2 id="skillsHeading" class="section-title">
             <span>Technical Skills Matrix</span>
           </h2>
-          <p>Track your competence across languages, libraries, protocols, and tools.</p>
+          <p>Track your technical competence across languages, frameworks, and protocols.</p>
         </div>
-        <button id="btnOpenAddSkill" class="btn btn-primary btn-sm">+ Log New Skill</button>
-      </div>
-
-      <!-- Empty State for Skills -->
-      <div id="emptySkillsState" class="empty-state" style="display: none; padding: 2.5rem 1rem;">
-        <div class="empty-state-icon">💡</div>
-        <h3 class="empty-state-title">No skills logged yet</h3>
-        <p class="empty-state-desc">Start adding languages, tools, and frameworks with their proficiency levels.</p>
-        <button class="btn btn-secondary btn-sm" onclick="openModal('modalAddSkill')">+ Add Your First Skill</button>
+        <button id="btnOpenAddSkillModal" class="btn btn-primary btn-sm">+ Log New Skill</button>
       </div>
 
       <!-- Skills Table Card -->
@@ -102,25 +115,44 @@
 
   </main>
 
-  <!-- Modal: Add Task for Day -->
-  <div id="modalAddPlanTask" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="addTaskDayHeading">
+  <!-- Modal: Add Personal Slot -->
+  <div id="modalPersonalSlot" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="personalSlotHeading">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 id="addTaskDayHeading" class="modal-title">Add Study Goal for <span id="planTaskDayLabel">Monday</span></h3>
-        <button class="modal-close" onclick="closeModal('modalAddPlanTask')" aria-label="Close dialog">×</button>
+        <h3 id="personalSlotHeading" class="modal-title">Add Personal Study Slot for <span id="personalSlotDayName">Monday</span></h3>
+        <button type="button" class="modal-close" onclick="closePlannerModal('modalPersonalSlot')" aria-label="Close modal">✕</button>
       </div>
-      <form id="formAddPlanTask">
-        <input type="hidden" id="planTaskDay">
+
+      <form id="formPersonalSlot" novalidate>
+        <input type="hidden" id="personalSlotDayIndex">
+
         <div class="modal-body">
           <div class="form-group">
-            <label for="planTaskText" class="form-label">Study Task / Goal <span class="req">*</span></label>
-            <input type="text" id="planTaskText" class="form-control" placeholder="e.g. Solve 2 LeetCode problems + revise Docker networking" required>
+            <label for="personalSlotTitle" class="form-label">Study Goal / Focus <span class="req">*</span></label>
+            <input type="text" id="personalSlotTitle" class="form-control" placeholder="e.g. Solve 2 LeetCode dynamic programming questions" required>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="personalSlotStart" class="form-label">Start Time</label>
+              <input type="time" id="personalSlotStart" class="form-control" value="18:00">
+            </div>
+
+            <div class="form-group">
+              <label for="personalSlotEnd" class="form-label">End Time</label>
+              <input type="time" id="personalSlotEnd" class="form-control" value="19:30">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="personalSlotNotes" class="form-label">Notes & Objectives</label>
+            <textarea id="personalSlotNotes" class="form-control" rows="2" placeholder="Optional notes, links, or exercise details..."></textarea>
           </div>
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline" onclick="closeModal('modalAddPlanTask')">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save Goal</button>
+          <button type="button" class="btn btn-outline" onclick="closePlannerModal('modalPersonalSlot')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Personal Slot</button>
         </div>
       </form>
     </div>
@@ -131,24 +163,25 @@
     <div class="modal-card">
       <div class="modal-header">
         <h3 id="addSkillHeading" class="modal-title">Log Technical Skill</h3>
-        <button class="modal-close" onclick="closeModal('modalAddSkill')" aria-label="Close dialog">×</button>
+        <button type="button" class="modal-close" onclick="closePlannerModal('modalAddSkill')" aria-label="Close dialog">✕</button>
       </div>
+
       <form id="formAddSkill">
         <div class="modal-body">
           <div class="form-group">
-            <label for="skillName" class="form-label">Skill / Tech Name <span class="req">*</span></label>
+            <label for="skillName" class="form-label">Skill / Technology <span class="req">*</span></label>
             <input type="text" id="skillName" class="form-control" placeholder="e.g. TypeScript, PyTorch, Docker" required>
           </div>
 
           <div class="form-group">
-            <label for="skillCategory" class="form-label">Domain / Category</label>
-            <input type="text" id="skillCategory" class="form-control" placeholder="e.g. Frontend, DevOps, Machine Learning, Database" value="General">
+            <label for="skillCategory" class="form-label">Category</label>
+            <input type="text" id="skillCategory" class="form-control" placeholder="e.g. Frontend, DevOps, Machine Learning" value="General">
           </div>
 
           <div class="form-group">
             <label for="skillLevel" class="form-label">Proficiency Level</label>
             <select id="skillLevel" class="form-control">
-              <option value="Beginner">Beginner (Learning syntax & concepts)</option>
+              <option value="Beginner">Beginner (Learning syntax & fundamentals)</option>
               <option value="Intermediate" selected>Intermediate (Building projects independently)</option>
               <option value="Advanced">Advanced (Production-ready & optimization)</option>
               <option value="Expert">Expert (Architecture & deep internals)</option>
@@ -157,13 +190,15 @@
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline" onclick="closeModal('modalAddSkill')">Cancel</button>
+          <button type="button" class="btn btn-outline" onclick="closePlannerModal('modalAddSkill')">Cancel</button>
           <button type="submit" class="btn btn-primary">Add to Matrix</button>
         </div>
       </form>
     </div>
   </div>
 
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" aria-live="polite"></div>
 
   <!-- Footer -->
   <footer class="footer">
@@ -178,11 +213,6 @@
     </div>
   </footer>
 
-  <script src="script.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      initPlannerView();
-    });
-  </script>
+  <script src="planner.js"></script>
 </body>
 </html>

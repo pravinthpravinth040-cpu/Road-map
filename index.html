@@ -44,6 +44,15 @@
     </div>
   </header>
 
+  <!-- Platform Announcement Banner -->
+  <div id="announcementBanner" class="announcement-banner" style="display: none;" role="region" aria-label="Platform Announcement">
+    <div class="announcement-content">
+      <span class="announcement-icon">📢</span>
+      <span id="announcementMessageText"></span>
+    </div>
+    <button id="btnDismissAnnouncement" class="announcement-close-btn" aria-label="Dismiss announcement">✕</button>
+  </div>
+
   <!-- Main Content Area -->
   <main class="container">
 
@@ -241,10 +250,48 @@
 
   <script src="script.js"></script>
   <script>
-    // Initialize Dashboard View
-    document.addEventListener('DOMContentLoaded', () => {
+    // Initialize Dashboard View & Announcement Banner
+    document.addEventListener('DOMContentLoaded', async () => {
       initDashboard();
+      loadAnnouncementBanner();
     });
+
+    async function loadAnnouncementBanner() {
+      const banner = document.getElementById('announcementBanner');
+      const textEl = document.getElementById('announcementMessageText');
+      const dismissBtn = document.getElementById('btnDismissAnnouncement');
+      if (!banner || !textEl) return;
+
+      const client = window.supabaseClient || (typeof SkillPathAuth !== 'undefined' && SkillPathAuth.getClient());
+      if (!client) return;
+
+      try {
+        const { data, error } = await client
+          .from('announcements')
+          .select('id, message')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error || !data) return;
+
+        // Check if dismissed in this session
+        if (sessionStorage.getItem(`dismissed_announcement_${data.id}`)) return;
+
+        textEl.textContent = data.message;
+        banner.style.display = 'flex';
+
+        if (dismissBtn) {
+          dismissBtn.onclick = () => {
+            banner.style.display = 'none';
+            sessionStorage.setItem(`dismissed_announcement_${data.id}`, 'true');
+          };
+        }
+      } catch (e) {
+        console.warn('Could not load announcement banner:', e);
+      }
+    }
   </script>
 </body>
 </html>

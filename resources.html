@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SkillPath - IT Learning Resources & Bookmarks</title>
+  <title>Curated Learning Resources - SkillPath</title>
   <meta name="description" content="Organize documentation, tutorials, cheat sheets, and courses for your IT career roadmaps.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <!-- Supabase CDN (Pinned Version) & Config -->
+
+  <!-- Supabase CDN & Central Config -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
   <script src="config.js"></script>
   <script src="auth.js"></script>
@@ -34,9 +35,6 @@
 
       <div class="nav-actions">
         <div id="navAuthContainer"></div>
-        <button id="btnExportData" class="btn btn-outline btn-sm">💾 Export</button>
-        <button id="btnImportData" class="btn btn-outline btn-sm">📥 Import</button>
-        <input type="file" id="importFileInput" accept=".json" style="display: none;" aria-hidden="true">
         <button id="btnOpenAddResource" class="btn btn-primary btn-sm">+ Save Resource</button>
         <button id="mobileMenuToggle" class="mobile-toggle" aria-label="Toggle Navigation Menu">☰</button>
       </div>
@@ -44,38 +42,51 @@
   </header>
 
   <!-- Main Content Area -->
-  <main class="container">
+  <main class="container" style="padding-top: 2rem; padding-bottom: 5rem;">
 
     <!-- Header Section -->
-    <section style="padding: 2.5rem 0 1.5rem;" aria-labelledby="resourcesHeroHeading">
-      <div class="section-header">
+    <section class="admin-header-card" style="margin-bottom: 2rem;">
+      <div class="admin-title-row">
         <div>
-          <h1 id="resourcesHeroHeading" style="font-size: 2.1rem; margin-bottom: 0.3rem;">Curated Learning Resources</h1>
-          <p>Bookmark high-quality documentation, interactive playgrounds, GitHub repos, and video tutorials.</p>
+          <span class="roadmap-badge badge-global">📚 Documentation & Study Hub</span>
+          <h1 style="font-size: 2rem; margin-top: 0.5rem; margin-bottom: 0.25rem;">Curated Learning Resources</h1>
+          <p class="hero-subtitle" style="margin-bottom: 0;">
+            Explore official verified guides and cheat-sheets curated by SkillPath administrators, or bookmark your own personal learning links.
+          </p>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="openModal('modalAddResource')">+ Add Resource</button>
-      </div>
-
-      <!-- Filter & Search Toolbar -->
-      <div class="filter-bar">
-        <div class="search-input-wrap">
-          <input type="search" id="resourceSearch" class="form-control" placeholder="🔍 Search resources by title, notes, or topic...">
-        </div>
-        <div>
-          <select id="resourceDomainFilter" class="form-control" style="min-width: 200px;">
-            <option value="ALL">All Categories</option>
-            <option value="General">General</option>
-          </select>
-        </div>
+        <button class="btn btn-primary" onclick="openResourceModal('modalAddResource')">+ Save Personal Bookmark</button>
       </div>
     </section>
+
+    <!-- Filter & Search Toolbar -->
+    <div class="filter-bar" style="margin-bottom: 1.5rem;">
+      <div class="search-input-wrap" style="flex: 1; max-width: 400px;">
+        <input type="search" id="resourceSearch" class="form-control" placeholder="🔍 Search resources by title, notes, or category...">
+      </div>
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <select id="resourceCategoryFilter" class="form-control" style="min-width: 170px;">
+          <option value="ALL">All Categories</option>
+          <option value="Documentation">Documentation</option>
+          <option value="Tutorial">Tutorial</option>
+          <option value="Course">Course</option>
+          <option value="Security Guide">Security Guide</option>
+          <option value="General">General</option>
+        </select>
+
+        <select id="resourceOriginFilter" class="form-control" style="min-width: 170px;">
+          <option value="ALL">All Sources</option>
+          <option value="GLOBAL">🛡️ Admin Curated</option>
+          <option value="PERSONAL">👤 Personal</option>
+        </select>
+      </div>
+    </div>
 
     <!-- Empty State -->
     <div id="emptyResources" class="empty-state" style="display: none;">
       <div class="empty-state-icon">📑</div>
-      <h3 class="empty-state-title">No resources saved yet</h3>
-      <p class="empty-state-desc">Save documentation pages, courses, cheat-sheets, or interactive exercises for quick reference.</p>
-      <button class="btn btn-primary" onclick="openModal('modalAddResource')">+ Save Your First Resource</button>
+      <h3 class="empty-state-title">No resources found</h3>
+      <p class="empty-state-desc">Try clearing your filters or bookmark a new documentation link.</p>
+      <button class="btn btn-primary" onclick="openResourceModal('modalAddResource')">+ Save Bookmark</button>
     </div>
 
     <!-- Resources Dynamic Grid -->
@@ -83,13 +94,14 @@
 
   </main>
 
-  <!-- Modal: Add Resource -->
+  <!-- Modal: Add Personal Resource -->
   <div id="modalAddResource" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="addResourceModalHeading">
     <div class="modal-card">
       <div class="modal-header">
         <h3 id="addResourceModalHeading" class="modal-title">Save Learning Resource</h3>
-        <button class="modal-close" onclick="closeModal('modalAddResource')" aria-label="Close dialog">×</button>
+        <button type="button" class="modal-close" onclick="closeResourceModal('modalAddResource')" aria-label="Close dialog">×</button>
       </div>
+
       <form id="formAddResource">
         <div class="modal-body">
           <div class="form-group">
@@ -98,31 +110,46 @@
           </div>
 
           <div class="form-group">
-            <label for="resUrl" class="form-label">URL Link <span class="req">*</span></label>
+            <label for="resUrl" class="form-label">URL Destination <span class="req">*</span></label>
             <input type="url" id="resUrl" class="form-control" placeholder="https://developer.mozilla.org/..." required>
           </div>
 
-          <div class="form-group">
-            <label for="resDomain" class="form-label">Related Domain / Category</label>
-            <select id="resDomain" class="form-control">
-              <option value="General">General</option>
-            </select>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="resCategory" class="form-label">Category</label>
+              <select id="resCategory" class="form-control">
+                <option value="Documentation">Documentation</option>
+                <option value="Tutorial">Tutorial</option>
+                <option value="Course">Course</option>
+                <option value="Security Guide">Security Guide</option>
+                <option value="General" selected>General</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="resDomain" class="form-label">Related Domain</label>
+              <select id="resDomain" class="form-control">
+                <option value="General">General</option>
+              </select>
+            </div>
           </div>
 
           <div class="form-group">
-            <label for="resNotes" class="form-label">Notes or Key Highlights</label>
-            <textarea id="resNotes" class="form-control" placeholder="Why is this resource useful? Key sections to revisit..."></textarea>
+            <label for="resNotes" class="form-label">Notes & Summary</label>
+            <textarea id="resNotes" class="form-control" rows="2" placeholder="Key takeaways or sections to revisit..."></textarea>
           </div>
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline" onclick="closeModal('modalAddResource')">Cancel</button>
+          <button type="button" class="btn btn-outline" onclick="closeResourceModal('modalAddResource')">Cancel</button>
           <button type="submit" class="btn btn-primary">Save Bookmark</button>
         </div>
       </form>
     </div>
   </div>
 
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" aria-live="polite"></div>
 
   <!-- Footer -->
   <footer class="footer">
@@ -137,11 +164,6 @@
     </div>
   </footer>
 
-  <script src="script.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      initResourcesView();
-    });
-  </script>
+  <script src="resources.js"></script>
 </body>
 </html>
